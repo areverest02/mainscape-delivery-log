@@ -132,8 +132,10 @@ app.post('/api/contacts', async (req, res) => {
     );
     const c = response.data.Contacts?.[0];
     res.json({ id: c.ContactID, name: c.Name, phone, email });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create contact' });
+   } catch (err) {
+    console.error('Invoice error:', JSON.stringify(err.response?.data || err.message));
+    res.status(500).json({ error: err.response?.data?.Message || err.response?.data || 'Failed to create invoice' });
+  }
   }
 });
 
