@@ -302,6 +302,12 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
 
     <!-- DRIVER ONLY VIEW -->
     <div id="tab-driver-only" class="content" style="display:none">
+      <div class="tabs">
+        <button class="tab active" onclick="filterDriverOnly('all',this)">All</button>
+        <button class="tab" onclick="filterDriverOnly('Hino 300',this)">Hino 300</button>
+        <button class="tab" onclick="filterDriverOnly('Hino 700',this)">Hino 700</button>
+        <button class="tab" onclick="filterDriverOnly('Hino 700 Truck and Trailer',this)">H700 T&T</button>
+      </div>
       <div id="driver-only-list"></div>
     </div>
   </div>
@@ -632,8 +638,10 @@ function renderDriverList(){
 }
 
 // Driver-only view — shows ALL trucks, grouped by day
+let driverOnlyFilter='all';
+function filterDriverOnly(truck,el){driverOnlyFilter=truck;document.querySelectorAll('#tab-driver-only .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');renderDriverOnly();}
 function renderDriverOnly(){
-  const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done);
+  const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done&&(driverOnlyFilter==='all'||d.truck===driverOnlyFilter));
   const el=document.getElementById('driver-only-list');
   if(!items.length){el.innerHTML='<div class="empty"><i class="ti ti-mood-happy"></i>No deliveries scheduled — check back soon!</div>';return;}
   const byDate={};items.forEach(d=>{const key=d.date||'unscheduled';if(!byDate[key])byDate[key]=[];byDate[key].push(d);});
