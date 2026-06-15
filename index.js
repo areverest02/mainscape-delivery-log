@@ -7,6 +7,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
 const XERO_CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
@@ -25,8 +26,6 @@ function getTokenCookie(req) {
   if (!match) return null;
   try { return JSON.parse(Buffer.from(match[1], 'base64').toString()); } catch { return null; }
 }
-
-app.use(express.static(path.join(__dirname, '../public')));
 
 app.get('/auth/xero', (req, res) => {
   const url = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${XERO_CLIENT_ID}&redirect_uri=${encodeURIComponent(XERO_REDIRECT_URI)}&scope=${encodeURIComponent(XERO_SCOPES)}&state=mainscape`;
@@ -147,7 +146,7 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
