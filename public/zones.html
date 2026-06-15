@@ -1,0 +1,225 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mainscape Garden Supplies — Delivery Zones</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0ede6; }
+.page { width: 297mm; min-height: 210mm; margin: 0 auto; background: #fff; display: flex; flex-direction: column; }
+.header { background: #1a3a1a; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header img { height: 44px; filter: brightness(0) invert(1); }
+.header-title { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+.header-sub { font-size: 13px; opacity: 0.7; margin-top: 2px; }
+.header-right { text-align: right; font-size: 12px; opacity: 0.6; }
+.main { display: flex; flex: 1; }
+#map { flex: 1; min-height: 520px; }
+.sidebar { width: 220px; background: #fafaf8; border-left: 1px solid #e0ddd6; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sidebar-title { font-size: 13px; font-weight: 600; color: #333; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.zone-card { border-radius: 8px; overflow: hidden; border: 1px solid rgba(0,0,0,0.08); }
+.zone-header { padding: 7px 10px; display: flex; align-items: center; gap: 8px; }
+.zone-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.zone-name { font-size: 13px; font-weight: 600; color: #fff; }
+.zone-price { font-size: 11px; color: rgba(255,255,255,0.8); margin-left: auto; }
+.zone-suburbs { padding: 6px 10px; font-size: 11px; color: #555; line-height: 1.6; background: #fff; }
+.footer { background: #1a3a1a; color: rgba(255,255,255,0.6); font-size: 11px; padding: 8px 24px; display: flex; justify-content: space-between; }
+@media print {
+  body { background: #fff; }
+  .page { width: 100%; box-shadow: none; }
+  #map { height: 520px !important; }
+}
+.print-btn { position: fixed; bottom: 20px; right: 20px; background: #2d7a3a; color: #fff; border: none; padding: 12px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 9999; }
+.print-btn:hover { background: #236030; }
+@media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+<div class="page">
+  <div class="header">
+    <div class="header-left">
+      <img src="https://mainscapegardensupplies.co.nz/wp-content/uploads/2020/04/cropped-mainscape-garden-logo-1-300x66.png" alt="Mainscape">
+      <div>
+        <div class="header-title">Delivery Zone Map</div>
+        <div class="header-sub">1543 Springs Road, Lincoln — Christchurch & Canterbury</div>
+      </div>
+    </div>
+    <div class="header-right">All prices + GST<br>Zone 6 = Quote required</div>
+  </div>
+
+  <div class="main">
+    <div id="map"></div>
+    <div class="sidebar">
+      <div class="sidebar-title">Delivery Zones</div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#16a34a">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 1</div>
+          <div class="zone-price">Mini $55 · Big $75</div>
+        </div>
+        <div class="zone-suburbs">Lincoln, Springston, Greenpark, Ladbrooks, Prebbleton</div>
+      </div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#2563eb">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 2</div>
+          <div class="zone-price">Mini $74 · Big $100</div>
+        </div>
+        <div class="zone-suburbs">Rolleston, Hornby, Taitapu, Wigram, Halswell, Motukara, Templeton, Islington, Sockburn</div>
+      </div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#d97706">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 3</div>
+          <div class="zone-price">Mini $103 · Big $143</div>
+        </div>
+        <div class="zone-suburbs">West Melton, Kirwee, Leeston, Avonhead, Yaldhurst, Ilam, Hoon Hay, Riccarton, Addington, Spreydon, Hillmorton, Beckenham, St Martins, Church Corner, Russley</div>
+      </div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#dc2626">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 4</div>
+          <div class="zone-price">Mini $120 · Big $175</div>
+        </div>
+        <div class="zone-suburbs">Cashmere, Woolston, Harewood, Bishopdale, Casebrook, Papanui, Merivale, St Albans, Sydenham, Edgeware, Shirley, Belfast, Redwood, Northwood, Burnside, Bryndwr, Fendalton, Central City</div>
+      </div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#7c3aed">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 5</div>
+          <div class="zone-price">Mini $150 · Big $205</div>
+        </div>
+        <div class="zone-suburbs">Marshland, Parklands, Burwood, New Brighton, Bromley, Aranui, Wainoni, Dallington, Bexley, Waltham, Linwood, Richmond, Phillipstown</div>
+      </div>
+
+      <div class="zone-card">
+        <div class="zone-header" style="background:#6b7280">
+          <div class="zone-dot" style="background:#fff"></div>
+          <div class="zone-name">Zone 6</div>
+          <div class="zone-price">Request quote</div>
+        </div>
+        <div class="zone-suburbs">Lyttelton, Sumner, Kaiapoi, Rangiora, Burnham, Darfield, Banks Peninsula &amp; all other areas</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Mainscape Garden Supplies Ltd · mainscapegardensupplies.co.nz</span>
+    <span>Prices subject to change · Soil delivery rates may differ</span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([-43.55, 172.59], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 18
+}).addTo(map);
+
+const zColors = {1:'#16a34a',2:'#2563eb',3:'#d97706',4:'#dc2626',5:'#7c3aed',6:'#6b7280'};
+
+const suburbs = [
+  {name:'Lincoln',z:1,ll:[-43.643,172.484]},
+  {name:'Springston',z:1,ll:[-43.679,172.413]},
+  {name:'Greenpark',z:1,ll:[-43.719,172.451]},
+  {name:'Ladbrooks',z:1,ll:[-43.655,172.518]},
+  {name:'Prebbleton',z:1,ll:[-43.612,172.494]},
+  {name:'Rolleston',z:2,ll:[-43.592,172.380]},
+  {name:'Hornby',z:2,ll:[-43.551,172.493]},
+  {name:'Taitapu',z:2,ll:[-43.717,172.561]},
+  {name:'Wigram',z:2,ll:[-43.558,172.527]},
+  {name:'Halswell',z:2,ll:[-43.589,172.555]},
+  {name:'Motukara',z:2,ll:[-43.657,172.386]},
+  {name:'Templeton',z:2,ll:[-43.530,172.452]},
+  {name:'Islington',z:2,ll:[-43.548,172.469]},
+  {name:'Sockburn',z:2,ll:[-43.547,172.508]},
+  {name:'West Melton',z:3,ll:[-43.526,172.380]},
+  {name:'Kirwee',z:3,ll:[-43.498,172.274]},
+  {name:'Leeston',z:3,ll:[-43.763,172.299]},
+  {name:'Avonhead',z:3,ll:[-43.512,172.548]},
+  {name:'Yaldhurst',z:3,ll:[-43.524,172.500]},
+  {name:'Ilam',z:3,ll:[-43.523,172.564]},
+  {name:'Hoon Hay',z:3,ll:[-43.579,172.601]},
+  {name:'Riccarton',z:3,ll:[-43.535,172.583]},
+  {name:'Upper Riccarton',z:3,ll:[-43.530,172.570]},
+  {name:'Addington',z:3,ll:[-43.548,172.607]},
+  {name:'Spreydon',z:3,ll:[-43.558,172.619]},
+  {name:'Hillmorton',z:3,ll:[-43.566,172.620]},
+  {name:'Beckenham',z:3,ll:[-43.567,172.638]},
+  {name:'St Martins',z:3,ll:[-43.565,172.652]},
+  {name:'Church Corner',z:3,ll:[-43.541,172.577]},
+  {name:'Russley',z:3,ll:[-43.505,172.536]},
+  {name:'Cashmere',z:4,ll:[-43.587,172.633]},
+  {name:'Woolston',z:4,ll:[-43.554,172.678]},
+  {name:'Harewood',z:4,ll:[-43.487,172.544]},
+  {name:'Bishopdale',z:4,ll:[-43.499,172.580]},
+  {name:'Casebrook',z:4,ll:[-43.477,172.601]},
+  {name:'Papanui',z:4,ll:[-43.497,172.607]},
+  {name:'Merivale',z:4,ll:[-43.508,172.627]},
+  {name:'St Albans',z:4,ll:[-43.513,172.633]},
+  {name:'Sydenham',z:4,ll:[-43.546,172.631]},
+  {name:'Edgeware',z:4,ll:[-43.514,172.646]},
+  {name:'Shirley',z:4,ll:[-43.499,172.663]},
+  {name:'Belfast',z:4,ll:[-43.448,172.631]},
+  {name:'Redwood',z:4,ll:[-43.469,172.619]},
+  {name:'Northwood',z:4,ll:[-43.455,172.641]},
+  {name:'Burnside',z:4,ll:[-43.499,172.561]},
+  {name:'Bryndwr',z:4,ll:[-43.508,172.600]},
+  {name:'Fendalton',z:4,ll:[-43.516,172.609]},
+  {name:'Central City',z:4,ll:[-43.531,172.636]},
+  {name:'Marshland',z:5,ll:[-43.458,172.692]},
+  {name:'Parklands',z:5,ll:[-43.483,172.712]},
+  {name:'Burwood',z:5,ll:[-43.492,172.693]},
+  {name:'New Brighton',z:5,ll:[-43.503,172.730]},
+  {name:'Bromley',z:5,ll:[-43.539,172.697]},
+  {name:'Aranui',z:5,ll:[-43.517,172.691]},
+  {name:'Wainoni',z:5,ll:[-43.506,172.682]},
+  {name:'Dallington',z:5,ll:[-43.509,172.665]},
+  {name:'Bexley',z:5,ll:[-43.498,172.698]},
+  {name:'Waltham',z:5,ll:[-43.549,172.651]},
+  {name:'Linwood',z:5,ll:[-43.535,172.665]},
+  {name:'Richmond',z:5,ll:[-43.523,172.657]},
+  {name:'Phillipstown',z:5,ll:[-43.541,172.657]},
+  {name:'Lyttelton',z:6,ll:[-43.603,172.730]},
+  {name:'Sumner',z:6,ll:[-43.571,172.760]},
+  {name:'Kaiapoi',z:6,ll:[-43.384,172.656]},
+  {name:'Rangiora',z:6,ll:[-43.304,172.599]},
+  {name:'Burnham',z:6,ll:[-43.614,172.316]},
+];
+
+suburbs.forEach(s => {
+  const col = zColors[s.z];
+  const marker = L.circleMarker(s.ll, {
+    radius: 9,
+    color: '#fff',
+    fillColor: col,
+    fillOpacity: 0.95,
+    weight: 1.5
+  }).addTo(map);
+
+  marker.bindTooltip(`<strong>${s.name}</strong> — Zone ${s.z}`, {sticky: true});
+
+  L.tooltip({permanent: true, direction: 'right', offset: [10, 0], opacity: 1})
+    .setContent(`<span style="font-size:10px;font-weight:600;color:${col};text-shadow:0 0 3px #fff,0 0 3px #fff">${s.name}</span>`)
+    .setLatLng(s.ll)
+    .addTo(map);
+});
+
+// Yard marker
+const yardIcon = L.divIcon({
+  html: `<div style="background:#1a3a1a;color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4)">★ MAINSCAPE</div>`,
+  iconAnchor: [50, 14], className: ''
+});
+L.marker([-43.645, 172.465], {icon: yardIcon}).addTo(map);
+</script>
+</body>
+</html>
