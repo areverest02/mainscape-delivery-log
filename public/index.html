@@ -419,7 +419,7 @@ function showDriverTab(tab){
   loadDeliveries(true);
 }
 
-function setDefaultDate(){const today=new Date().toISOString().split('T')[0];document.getElementById('delivery-date').value=today;document.getElementById('exyard-date').value=today;}
+function setDefaultDate(){const now=new Date();const today=now.toISOString().split("T")[0];const currentTime=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");document.getElementById("delivery-date").value=today;document.getElementById("exyard-date").value=today;document.getElementById("delivery-time").value=currentTime;document.getElementById("exyard-time").value=currentTime;}
 
 async function loadProducts(){
   try{const r=await fetch('/api/products',{credentials:'include'});const d=await r.json();if(d.products&&d.products.length){PRODUCTS=d.products;if(!productRows[0].sku&&PRODUCTS.length)productRows[0].sku=PRODUCTS[0].sku;}}catch(e){}
