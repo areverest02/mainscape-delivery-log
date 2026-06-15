@@ -212,6 +212,14 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
         <button class="toggle-opt active" id="toggle-delivered" onclick="setDeliveryType('delivered')"><i class="ti ti-truck"></i> Delivered</button>
         <button class="toggle-opt" id="toggle-exyard" onclick="setDeliveryType('exyard')"><i class="ti ti-building-warehouse"></i> Ex Yard</button>
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:12px" id="zone-fee-toggle-wrap">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#1e40af">Delivery fee</div>
+          <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
+        </div>
+        <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
+      </div>
+
       <div id="delivery-details">
         <div class="section-hdr">Delivery details</div>
         <div class="card">
@@ -436,7 +444,14 @@ async function loadProducts(){
 }
 
 function setPaymentType(type){paymentType=type;document.getElementById('toggle-invoice').className='toggle-opt'+(type==='invoice'?' active':'');document.getElementById('toggle-eftpos').className='toggle-opt'+(type==='eftpos'?' active-amber':'');}
-function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';}
+function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
+function toggleZoneFee(){
+  includeZoneFee=!includeZoneFee;
+  const btn=document.getElementById('zone-fee-toggle');
+  btn.textContent=includeZoneFee?'On':'Off';
+  btn.style.background=includeZoneFee?'#2563eb':'#9ca3af';
+  detectZoneFromInput();
+}
 function toggleDiscount(){tradeDiscount=!tradeDiscount;const btn=document.getElementById('discount-toggle');btn.textContent=tradeDiscount?'On — 10% off':'Off';btn.style.background=tradeDiscount?'#fef3c7':'#fff';renderProductRows();}
 
 function renderProductRows(){
@@ -483,7 +498,7 @@ function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TR
 function updateWeightSummary(){const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const totalM=productRows.reduce((s,r)=>s+getM3(r),0);const ws=document.getElementById('weight-summary');if(totalT>0){const rec=autoTruck(totalT);const pct=Math.min(100,(totalT/rec.maxT)*100);document.getElementById('weight-text').textContent=`Est. ${totalT.toFixed(2)}T / ${totalM.toFixed(1)}m3`;document.getElementById('truck-rec').textContent=`Recommended: ${rec.name}`;document.getElementById('truck-rec').style.display='block';const wf=document.getElementById('weight-fill');wf.style.width=pct+'%';wf.className='weight-fill'+(pct>90?' danger':pct>70?' warning':'');ws.style.display='block';}else{ws.style.display='none';}}
 function hasSoilInOrder(){return productRows.some(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);return p&&isSoilProduct(p.name);});}
 function detectZone(addr,truck){const a=addr.toLowerCase();const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();const zoneList=isSoil?SOIL_ZONES:ZONES;for(const z of zoneList){if(z.areas.some(area=>a.includes(area))){return{zone:z.name,fee:isBig?z.big:z.mini,isSoil};}}return null;}
-function detectZoneFromInput(){const addr=document.getElementById('job-address').value;const truckSel=document.getElementById('truck-select').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const rec=totalT>0?autoTruck(totalT).name:'Hino 300';const truck=truckSel==='auto'?rec:truckSel;const z=detectZone(addr,truck);const el=document.getElementById('zone-result');if(z){el.innerHTML=`<span class="zone-pill"><i class="ti ti-map-pin"></i> ${z.zone} - $${z.fee}+GST${z.isSoil?' (soil)':''}</span>`;el.style.display='block';}else if(addr.length>5){el.innerHTML=`<span class="badge badge-pending">Zone 6 - Quote required</span>`;el.style.display='block';}else{el.style.display='none';}}
+function detectZoneFromInput(){const addr=document.getElementById('job-address').value;const truckSel=document.getElementById('truck-select').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const rec=totalT>0?autoTruck(totalT).name:'Hino 300';const truck=truckSel==='auto'?rec:truckSel;const z=detectZone(addr,truck);const el=document.getElementById('zone-result');if(z&&includeZoneFee){el.innerHTML=`<span class="zone-pill"><i class="ti ti-map-pin"></i> ${z.zone} - $${z.fee}+GST${z.isSoil?' (soil)':''}</span>`;el.style.display='block';}else if(z&&!includeZoneFee){el.innerHTML=`<span class="zone-pill" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-map-pin"></i> ${z.zone} - No fee</span>`;el.style.display='block';}else if(addr.length>5){el.innerHTML=`<span class="badge badge-pending">Zone 6 - Quote required</span>`;el.style.display='block';}else{el.style.display='none';}}
 let addrTimeout;
 async function onAddressInput(){const val=document.getElementById('job-address').value;detectZoneFromInput();clearTimeout(addrTimeout);if(val.length<4){document.getElementById('address-suggestions').style.display='none';return;}addrTimeout=setTimeout(async()=>{try{const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val+', Canterbury, New Zealand')}&format=json&limit=5&countrycodes=nz`,{headers:{'Accept-Language':'en'}});const data=await r.json();const el=document.getElementById('address-suggestions');if(!data.length){el.style.display='none';return;}el.innerHTML=data.map(a=>`<div class="search-result" onclick="selectAddress('${a.display_name.replace(/'/g,"&#39;").replace(/"/g,'&quot;')}')">${a.display_name}</div>`).join('');el.style.display='block';}catch{}},500);}
 function selectAddress(addr){const parts=addr.split(',');document.getElementById('job-address').value=parts.slice(0,3).join(',').trim();document.getElementById('address-suggestions').style.display='none';detectZoneFromInput();}
@@ -497,7 +512,7 @@ async function confirmOrder(){
   if(!currentContact){const name=document.getElementById('nc-name').value.trim();if(!name){showMsg(msg,'err','Please select or add a customer.');return;}btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';try{const r=await fetch('/api/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nc-phone').value.trim(),email:document.getElementById('nc-email').value.trim()})});const d=await r.json();if(d.error)throw new Error(d.error);currentContact=d;}catch(e){showMsg(msg,'err','Could not create contact: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}}
   const validRows=productRows.filter(r=>r.sku);if(!validRows.length){showMsg(msg,'err','Please add at least one product.');return;}
   let addr='Ex Yard',zone='Ex Yard',zoneFee=0,truck='Ex Yard',date='',time='09:00',zoneProductDesc='';
-  if(deliveryType==='delivered'){addr=document.getElementById('job-address').value.trim();if(!addr){showMsg(msg,'err','Please enter a delivery address.');return;}date=document.getElementById('delivery-date').value;time=document.getElementById('delivery-time').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const truckSel=document.getElementById('truck-select').value;const rec=totalT>0?autoTruck(totalT).name:'Hino 300';truck=truckSel==='auto'?rec:truckSel;const zInfo=detectZone(addr,truck);zone=zInfo?zInfo.zone:'Zone 6 - Quote';zoneFee=zInfo?zInfo.fee:0;const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();zoneProductDesc=`${zone} - ${isBig?'Big':'Mini'} Truck${isSoil?' SOIL':''} Delivery`;}
+  if(deliveryType==='delivered'){addr=document.getElementById('job-address').value.trim();if(!addr){showMsg(msg,'err','Please enter a delivery address.');return;}date=document.getElementById('delivery-date').value;time=document.getElementById('delivery-time').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const truckSel=document.getElementById('truck-select').value;const rec=totalT>0?autoTruck(totalT).name:'Hino 300';truck=truckSel==='auto'?rec:truckSel;const zInfo=detectZone(addr,truck);zone=zInfo?zInfo.zone:'Zone 6 - Quote';zoneFee=(zInfo&&includeZoneFee)?zInfo.fee:0;const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();zoneProductDesc=`${zone} - ${isBig?'Big':'Mini'} Truck${isSoil?' SOIL':''} Delivery`;}
   else{date=document.getElementById('exyard-date').value;time=document.getElementById('exyard-time').value;}
   const lineItems=validRows.map(row=>{const p=PRODUCTS.find(x=>x.sku===row.sku);const m3=getM3(row);const basePrice=row.customPrice!==null?row.customPrice:(p?p.price:0);const qtyLabel=row.unit==='scoop'?`${row.qty} scoop${row.qty!==1?'s':''}`:`${m3.toFixed(2)}m3`;return{sku:row.sku,desc:`${p?p.name:row.sku} (${qtyLabel})`,qty:m3,price:basePrice,discount:tradeDiscount?10:0};});
   const newDelivery={contactId:currentContact.id,contactName:currentContact.name,contactPhone:currentContact.phone||'',contactEmail:currentContact.email||'',jobAddress:addr,deliveryType,paymentType,tradeDiscount,date,time,notes:document.getElementById('delivery-notes').value.trim(),truck,zone,zoneFee,zoneProductDesc,lineItems,done:false,invoiced:false,xeroInvoiceId:null,xeroInvoiceNumber:null,paymentStatus:null,createdAt:new Date().toISOString()};
@@ -509,7 +524,7 @@ async function confirmOrder(){
   }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}
   productRows=[{sku:PRODUCTS[0]?.sku||'',qty:1,unit:'m3',customPrice:null,searchText:''}];currentContact=null;tradeDiscount=false;
   document.getElementById('contact-search').value='';document.getElementById('job-address').value='';document.getElementById('zone-result').style.display='none';document.getElementById('address-suggestions').style.display='none';document.getElementById('selected-contact').style.display='none';document.getElementById('new-contact-form').style.display='none';document.getElementById('new-contact-toggle').style.display='inline-flex';document.getElementById('new-contact-toggle').innerHTML='<i class="ti ti-user-plus"></i> Add new customer';document.getElementById('delivery-notes').value='';document.getElementById('discount-toggle').textContent='Off';document.getElementById('discount-toggle').style.background='#fff';
-  setPaymentType('invoice');setDeliveryType('delivered');setDefaultDate();renderProductRows();
+  setPaymentType('invoice');setDeliveryType('delivered');setDefaultDate();renderProductRows();includeZoneFee=true;const ztBtn=document.getElementById('zone-fee-toggle');if(ztBtn){ztBtn.textContent='On';ztBtn.style.background='#2563eb';}
   btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';
   showMsg(msg,'ok','Delivery added for '+newDelivery.contactName);updateStats();
 }
@@ -639,6 +654,7 @@ function renderDriverList(){
 
 // Driver-only view — shows ALL trucks, grouped by day
 let driverOnlyFilter='all';
+let includeZoneFee=true;
 function filterDriverOnly(truck,el){driverOnlyFilter=truck;document.querySelectorAll('#tab-driver-only .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');renderDriverOnly();}
 function renderDriverOnly(){
   const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done&&(driverOnlyFilter==='all'||d.truck===driverOnlyFilter));
