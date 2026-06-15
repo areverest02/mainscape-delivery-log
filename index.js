@@ -7,7 +7,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
 const XERO_CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
@@ -146,7 +146,7 @@ app.post('/api/invoices', async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+  res.sendFile(path.join(process.cwd(), 'public/index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
