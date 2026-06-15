@@ -163,7 +163,7 @@ app.post('/api/invoices', async (req, res) => {
         Contact: contactId ? { ContactID: contactId } : { Name: contactName },
         Reference: jobAddress,
         LineItems: lineItems,
-        LineAmountTypes: 'EXCLUSIVE'
+        LineAmountTypes: 'NOTAX'
       }]
     };
     console.log('Creating invoice:', JSON.stringify(invoiceData));
