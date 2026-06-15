@@ -13,7 +13,7 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
 const XERO_CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
 const XERO_REDIRECT_URI = process.env.XERO_REDIRECT_URI;
-const XERO_SCOPES = 'offline_access accounting.contacts accounting.contacts.read accounting.invoices accounting.invoices.read';
+const XERO_SCOPES = 'offline_access accounting.contacts accounting.contacts.read accounting.invoices accounting.invoices.read accounting.settings.read';
 
 async function getDb() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -108,6 +108,25 @@ app.get('/auth/logout', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/products', async (req, res) => {
+  try {
+    const { access_token, tenant_id } = await getValidToken();
+    const response = await axios.get('https://api.xero.com/api.xro/2.0/Items', {
+      headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' }
+    });
+    const products = (response.data.Items || []).map(item => ({
+      sku: item.Code,
+      name: item.Name,
+      price: item.SalesDetails?.UnitPrice || 0,
+      description: item.Description || item.Name
+    })).filter(p => p.price > 0);
+    res.json({ products });
+  } catch (err) {
+    console.error('Products error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
 app.get('/api/contacts/search', async (req, res) => {
   try {
     const { access_token, tenant_id } = await getValidToken();
@@ -165,15 +184,12 @@ app.post('/api/invoices', async (req, res) => {
         LineItems: lineItems
       }]
     };
-    console.log('Creating invoice:', JSON.stringify(invoiceData));
     const response = await axios.post('https://api.xero.com/api.xro/2.0/Invoices',
       invoiceData,
       { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, 'Content-Type': 'application/json', Accept: 'application/json' } }
     );
-    console.log('Invoice response:', JSON.stringify(response.data).substring(0, 500));
     const inv = response.data.Invoices?.[0];
     if (inv?.HasErrors) {
-      console.error('Invoice validation errors:', JSON.stringify(inv.ValidationErrors));
       return res.status(500).json({ error: inv.ValidationErrors?.[0]?.Message || 'Validation error' });
     }
     res.json({ invoiceId: inv.InvoiceID, invoiceNumber: inv.InvoiceNumber });
