@@ -19,8 +19,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 const XERO_CLIENT_ID = process.env.XERO_CLIENT_ID;
 const XERO_CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
 const XERO_REDIRECT_URI = process.env.XERO_REDIRECT_URI;
-const XERO_SCOPES = 'offline_access accounting.contacts accounting.transactions';
-
+const XERO_SCOPES = 'accounting.contacts accounting.contacts.read accounting.transactions';
 app.get('/auth/xero', (req, res) => {
   const url = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${XERO_CLIENT_ID}&redirect_uri=${encodeURIComponent(XERO_REDIRECT_URI)}&scope=${encodeURIComponent(XERO_SCOPES)}&state=mainscape`;
   res.redirect(url);
