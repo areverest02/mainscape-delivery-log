@@ -514,12 +514,14 @@ async function updateDelivery(d){
 }
 async function deleteDelivery(dbId){
   if(!confirm('Delete this delivery?'))return;
-  try{await fetch('/api/deliveries/'+dbId,{method:'DELETE',credentials:'include'});deliveries=deliveries.filter(x=>x.dbId!==dbId);renderDeliveries();renderInvoiceList();renderArchive();updateStats();}
+  const id=parseInt(dbId);
+  try{await fetch('/api/deliveries/'+id,{method:'DELETE',credentials:'include'});deliveries=deliveries.filter(x=>x.dbId!==id);renderDeliveries();renderInvoiceList();renderArchive();updateStats();}
   catch(e){alert('Failed to delete');}
 }
 
 async function toggleDone(dbId){
-  const d=deliveries.find(x=>x.dbId===dbId);
+  const id=parseInt(dbId);
+  const d=deliveries.find(x=>x.dbId===id);
   if(!d)return;
   d.done=!d.done;
   if(d.done){d.doneAt=new Date().toISOString();d.doneBy=driverName||'Admin';}
@@ -529,7 +531,8 @@ async function toggleDone(dbId){
 }
 
 async function checkPaymentStatus(dbId){
-  const d=deliveries.find(x=>x.dbId===dbId);
+  const id=parseInt(dbId);
+  const d=deliveries.find(x=>x.dbId===id);
   if(!d||!d.xeroInvoiceId)return;
   const btns=document.querySelectorAll('#pay-btn-'+dbId);
   btns.forEach(b=>{b.disabled=true;b.innerHTML='<span class="spinner-sm"></span> Checking...';});
@@ -595,7 +598,7 @@ function renderInvoiceList(){
   el.innerHTML=pending.map(d=>{const total=(d.lineItems||[]).reduce((s,li)=>s+li.qty*(li.discount?li.price*(1-li.discount/100):li.price),0)+d.zoneFee;const sel=selectedForInvoice.has(d.dbId);return`<div class="delivery-card ${sel?'selected':''}" onclick="toggleInvoiceSelect('${d.dbId}')"><div style="display:flex;align-items:center;gap:10px"><div style="width:22px;height:22px;border-radius:50%;border:2px solid ${sel?'#2d7a3a':'#ddd'};background:${sel?'#2d7a3a':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0">${sel?'<i class="ti ti-check" style="font-size:12px;color:#fff"></i>':''}</div><div style="flex:1"><div class="delivery-name">${d.contactName}</div><div class="delivery-meta">${d.date?fmtDate(d.date)+' ':''} ${d.jobAddress}</div><div class="delivery-badges" style="margin-top:6px"><span class="badge ${truckBadge(d.truck)}">${d.truck}</span>${d.deliveryType==='delivered'?`<span class="zone-pill">${d.zone} $${d.zoneFee}</span>`:'<span class="badge badge-exyard">Ex Yard</span>'}<span style="font-weight:700">$${total.toFixed(0)}+GST</span>${d.tradeDiscount?'<span class="discount-badge">10%</span>':''}</div></div></div></div>`;}).join('');
   updateInvoiceSummary();
 }
-function toggleInvoiceSelect(dbId){if(selectedForInvoice.has(dbId))selectedForInvoice.delete(dbId);else selectedForInvoice.add(dbId);renderInvoiceList();}
+function toggleInvoiceSelect(dbId){const id=parseInt(dbId);if(selectedForInvoice.has(id))selectedForInvoice.delete(id);else selectedForInvoice.add(id);renderInvoiceList();}
 function updateInvoiceSummary(){const sel=deliveries.filter(d=>selectedForInvoice.has(d.dbId));const el=document.getElementById('invoice-summary');if(!sel.length){el.style.display='none';return;}const total=sel.reduce((s,d)=>(d.lineItems||[]).reduce((ss,li)=>ss+li.qty*(li.discount?li.price*(1-li.discount/100):li.price),0)+d.zoneFee+s,0);document.getElementById('invoice-summary-text').innerHTML=`<div style="font-size:14px"><strong>${[...new Set(sel.map(d=>d.contactName))].join(', ')}</strong> - ${sel.length} delivery${sel.length>1?'s':''}</div><div style="font-size:16px;font-weight:700;margin-top:8px;color:#2d7a3a">Total: $${total.toFixed(2)} + GST</div>`;el.style.display='block';}
 
 async function createInvoice(){
