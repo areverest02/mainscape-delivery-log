@@ -787,13 +787,9 @@ function renderDeliveries(){
 function renderExYard(){
   updateStats();
   const pending=deliveries.filter(d=>d.deliveryType==='exyard'&&!d.done).sort((a,b)=>((a.date||'9999')+a.time).localeCompare((b.date||'9999')+b.time));
-  const done=deliveries.filter(d=>d.deliveryType==='exyard'&&d.done).sort((a,b)=>(b.doneAt||'').localeCompare(a.doneAt||''));
   const el=document.getElementById('exyard-list');
-  let html='';
-  if(pending.length){html+=`<div class="section-hdr">Pending collection</div>`;html+=pending.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');}
-  if(done.length){html+=`<div class="section-hdr" style="margin-top:16px">Collected</div>`;html+=done.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');}
-  if(!pending.length&&!done.length){html='<div class="empty"><i class="ti ti-building-warehouse"></i>No ex yard orders</div>';}
-  el.innerHTML=html;
+  if(!pending.length){el.innerHTML='<div class="empty"><i class="ti ti-building-warehouse"></i>No pending ex yard orders</div>';return;}
+  el.innerHTML=pending.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');
 }
 
 // ===== INVOICE LIST — grouped by customer =====
