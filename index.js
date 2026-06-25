@@ -237,7 +237,7 @@ app.post('/api/invoices', async (req, res) => {
 
       for (const li of (d.lineItems || [])) {
         const desc = prefix ? `${prefix} | ${li.desc}` : li.desc;
-        const item = { Description: desc, Quantity: li.qty, UnitAmount: li.price, AccountCode: deliveryAccountCode };
+        const item = { ItemCode: li.sku, Description: desc, Quantity: li.qty, UnitAmount: li.price, AccountCode: deliveryAccountCode };
         if (li.discount && li.discount > 0) item.DiscountRate = li.discount;
         lineItems.push(item);
       }
