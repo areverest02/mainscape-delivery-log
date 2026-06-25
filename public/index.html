@@ -494,8 +494,7 @@ async function loadProducts(){
   document.getElementById('add-product-btn').style.display='inline-flex';
   // Set first product row with smart default unit
   if(PRODUCTS.length){
-    productRows[0].sku=PRODUCTS[0].sku;
-    productRows[0].unit=isM3Product(PRODUCTS[0].name)?'m3':'scoop';
+    productRows[0].unit='m3';
   }
   renderProductRows();
 }
@@ -621,7 +620,7 @@ async function confirmOrder(){
     deliveries.push(d.delivery);
   }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}
   // Reset form
-  productRows=[{sku:PRODUCTS[0]?.sku||'',qty:1,unit:PRODUCTS[0]?isM3Product(PRODUCTS[0].name)?'m3':'scoop':'scoop',customPrice:null,searchText:''}];
+  productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:''}];
   currentContact=null;tradeDiscount=false;
   document.getElementById('contact-search').value='';document.getElementById('job-address').value='';document.getElementById('zone-result').style.display='none';document.getElementById('address-suggestions').style.display='none';document.getElementById('selected-contact').style.display='none';document.getElementById('new-contact-form').style.display='none';document.getElementById('new-contact-toggle').style.display='inline-flex';document.getElementById('new-contact-toggle').innerHTML='<i class="ti ti-user-plus"></i> Add new customer';document.getElementById('delivery-notes').value='';document.getElementById('discount-toggle').textContent='Off';document.getElementById('discount-toggle').style.background='#fff';
   setPaymentType('invoice');setDeliveryType('delivered');setAccountType('trade');setDefaultDate();renderProductRows();
@@ -954,4 +953,3 @@ window.addEventListener('DOMContentLoaded',checkAuth);
 </script>
 </body>
 </html>
-
