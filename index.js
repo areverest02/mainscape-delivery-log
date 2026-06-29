@@ -230,31 +230,34 @@ app.post('/api/invoices', async (req, res) => {
     const lineItems = [];
 
     for (const d of deliveries) {
-      // Build prefix: "Wed 17 Jun 2026 - 12 Main St, Lincoln" or just date for ex yard
+      // Build description lines: date, address, #ref
       const dateLabel = fmtDateForInvoice(d.date);
       const addressLabel = d.deliveryType === 'delivered' ? d.jobAddress : 'Ex Yard';
-      const prefix = [dateLabel, addressLabel].filter(Boolean).join(' - ');
+      const refLine = d.notes ? `#${d.notes}` : '';
       // Use per-delivery accountType if available, else fall back to invoice-level
       const deliveryAccountCode = d.accountType === 'retail' ? '203' : accountCode;
 
       for (const li of (d.lineItems || [])) {
-        const desc = prefix ? `${prefix} | ${li.desc}` : li.desc;
+        const productName = li.desc.replace(/\s*\(.*?\)\s*$/, '');
+        const descParts = [productName, dateLabel, addressLabel, refLine].filter(Boolean);
+        const desc = descParts.join('\n');
         const item = { ItemCode: li.sku, Description: desc, Quantity: li.qty, UnitAmount: li.price, AccountCode: deliveryAccountCode };
         if (li.discount && li.discount > 0) item.DiscountRate = li.discount;
         lineItems.push(item);
       }
 
       if (d.zoneFee > 0 && d.deliveryType === 'delivered') {
-        const deliveryDesc = prefix
-          ? `${prefix} | ${d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`}`
-          : (d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`);
+        const zoneProductName = d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`;
+        const deliveryDescParts = [zoneProductName, dateLabel, addressLabel, refLine].filter(Boolean);
+        const deliveryDesc = deliveryDescParts.join('\n');
         const zoneLine = { Description: deliveryDesc, Quantity: 1, UnitAmount: d.zoneFee, AccountCode: deliveryAccountCode };
         if (d.zoneProductSku) zoneLine.ItemCode = d.zoneProductSku;
         lineItems.push(zoneLine);
 
         // FAF - Temporary Fuel Factor 16% of zone fee
         const fafAmount = Math.round(d.zoneFee * 0.16 * 100) / 100;
-        const fafDesc = prefix ? `${prefix} | Temporary Fuel Factor (FAF) - 16%` : 'Temporary Fuel Factor (FAF) - 16%';
+        const fafDescParts = ['Temporary Fuel Factor (FAF) - 16%', dateLabel, addressLabel, refLine].filter(Boolean);
+        const fafDesc = fafDescParts.join('\n');
         lineItems.push({ ItemCode: '312', Description: fafDesc, Quantity: 1, UnitAmount: fafAmount, AccountCode: deliveryAccountCode });
       }
     }
