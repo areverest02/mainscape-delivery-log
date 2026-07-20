@@ -174,11 +174,18 @@ app.delete('/api/deliveries/:dbId', async (req, res) => {
 });
 
 // ===== PRODUCTS =====
+// Xero's API has no reliable "archived" flag, so retired items still come through.
+// Add exact item names here (case-insensitive) to hide them from the app.
+const HIDDEN_PRODUCT_NAMES = ['screened soil delivered hino 700', 'screened soil delivered mini truck', 'screened soil'];
+
 app.get('/api/products', async (req, res) => {
   try {
     const { access_token, tenant_id } = await getValidToken();
     const response = await axios.get('https://api.xero.com/api.xro/2.0/Items', { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' } });
-    const products = (response.data.Items || []).map(item => ({ sku: item.Code, name: item.Name, price: item.SalesDetails?.UnitPrice || 0, description: item.Description || item.Name })).filter(p => p.price > 0);
+    const products = (response.data.Items || [])
+      .map(item => ({ sku: item.Code, name: item.Name, price: item.SalesDetails?.UnitPrice || 0, description: item.Description || item.Name }))
+      .filter(p => p.price > 0)
+      .filter(p => !HIDDEN_PRODUCT_NAMES.includes(p.name.trim().toLowerCase()));
     res.json({ products });
   } catch (err) {
     console.error('Products error:', err.response?.data || err.message);
@@ -219,68 +226,138 @@ function fmtDateForInvoice(dateStr) {
   return d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Helper to turn "Aikin Everest" into "A.E"
+function operatorInitials(name) {
+  if (!name) return '';
+  return name.trim().split(/\s+/).filter(Boolean).map(w => w[0].toUpperCase()).join('.');
+}
+
+// Builds and sends a Xero invoice for a set of deliveries, returns {invoiceId, invoiceNumber}
+async function createXeroInvoice({ access_token, tenant_id, contactId, contactName, accountType, deliveries }) {
+  const reference = [...new Set(deliveries.map(d => d.notes).filter(Boolean))].join(', ');
+  const accountCode = accountType === 'retail' ? '203' : '204';
+  const lineItems = [];
+
+  for (const d of deliveries) {
+    const dateLabel = fmtDateForInvoice(d.date);
+    const addressLabel = d.deliveryType === 'delivered' ? d.jobAddress : 'Ex Yard';
+    const refLine = d.notes ? `#${d.notes}` : '';
+    const operatorLine = operatorInitials(d.operator);
+    const deliveryAccountCode = d.accountType === 'retail' ? '203' : accountCode;
+
+    for (const li of (d.lineItems || [])) {
+      const productName = li.desc.replace(/\s*\(.*?\)\s*$/, '');
+      const descParts = [productName, dateLabel, addressLabel, refLine, operatorLine].filter(Boolean);
+      const desc = descParts.join('\n');
+      const item = { ItemCode: li.sku, Description: desc, Quantity: li.qty, UnitAmount: li.price, AccountCode: deliveryAccountCode };
+      if (li.discount && li.discount > 0) item.DiscountRate = li.discount;
+      lineItems.push(item);
+    }
+
+    if (d.zoneFee > 0 && d.deliveryType === 'delivered') {
+      const zoneProductName = d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`;
+      const deliveryDescParts = [zoneProductName, dateLabel, addressLabel, refLine, operatorLine].filter(Boolean);
+      const deliveryDesc = deliveryDescParts.join('\n');
+      const zoneLine = { Description: deliveryDesc, Quantity: 1, UnitAmount: d.zoneFee, AccountCode: deliveryAccountCode };
+      if (d.zoneProductSku) zoneLine.ItemCode = d.zoneProductSku;
+      lineItems.push(zoneLine);
+
+      const fafAmount = Math.round(d.zoneFee * 0.16 * 100) / 100;
+      const fafDescParts = ['Temporary Fuel Factor (FAF) - 16%', dateLabel, addressLabel, refLine, operatorLine].filter(Boolean);
+      const fafDesc = fafDescParts.join('\n');
+      lineItems.push({ ItemCode: '312', Description: fafDesc, Quantity: 1, UnitAmount: fafAmount, AccountCode: deliveryAccountCode });
+    }
+  }
+
+  const invoiceDate = deliveries
+    .map(d => d.date)
+    .filter(Boolean)
+    .sort()
+    .pop() || new Date().toISOString().slice(0, 10);
+
+  const response = await axios.post('https://api.xero.com/api.xro/2.0/Invoices',
+    { Invoices: [{ Type: 'ACCREC', Status: 'DRAFT', Contact: contactId ? { ContactID: contactId } : { Name: contactName }, Reference: reference || undefined, LineItems: lineItems, Date: invoiceDate }] },
+    { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, 'Content-Type': 'application/json', Accept: 'application/json' } }
+  );
+  const inv = response.data.Invoices?.[0];
+  if (inv?.HasErrors) throw new Error(inv.ValidationErrors?.[0]?.Message || 'Validation error');
+  return { invoiceId: inv.InvoiceID, invoiceNumber: inv.InvoiceNumber };
+}
+
 app.post('/api/invoices', async (req, res) => {
   try {
     const { access_token, tenant_id } = await getValidToken();
-    const { contactId, contactName, deliveries, jobAddress, accountType } = req.body;
-    // Build reference from notes across all deliveries (unique, non-empty)
-    const reference = [...new Set(deliveries.map(d => d.notes).filter(Boolean))].join(', ');
-    // Account codes: 204 = Trade Sales, 203 = Retail Sales
-    const accountCode = accountType === 'retail' ? '203' : '204';
-    const lineItems = [];
-
-    for (const d of deliveries) {
-      // Build description lines: date, address, #ref
-      const dateLabel = fmtDateForInvoice(d.date);
-      const addressLabel = d.deliveryType === 'delivered' ? d.jobAddress : 'Ex Yard';
-      const refLine = d.notes ? `#${d.notes}` : '';
-      // Use per-delivery accountType if available, else fall back to invoice-level
-      const deliveryAccountCode = d.accountType === 'retail' ? '203' : accountCode;
-
-      for (const li of (d.lineItems || [])) {
-        const productName = li.desc.replace(/\s*\(.*?\)\s*$/, '');
-        const descParts = [productName, dateLabel, addressLabel, refLine].filter(Boolean);
-        const desc = descParts.join('\n');
-        const item = { ItemCode: li.sku, Description: desc, Quantity: li.qty, UnitAmount: li.price, AccountCode: deliveryAccountCode };
-        if (li.discount && li.discount > 0) item.DiscountRate = li.discount;
-        lineItems.push(item);
-      }
-
-      if (d.zoneFee > 0 && d.deliveryType === 'delivered') {
-        const zoneProductName = d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`;
-        const deliveryDescParts = [zoneProductName, dateLabel, addressLabel, refLine].filter(Boolean);
-        const deliveryDesc = deliveryDescParts.join('\n');
-        const zoneLine = { Description: deliveryDesc, Quantity: 1, UnitAmount: d.zoneFee, AccountCode: deliveryAccountCode };
-        if (d.zoneProductSku) zoneLine.ItemCode = d.zoneProductSku;
-        lineItems.push(zoneLine);
-
-        // FAF - Temporary Fuel Factor 16% of zone fee
-        const fafAmount = Math.round(d.zoneFee * 0.16 * 100) / 100;
-        const fafDescParts = ['Temporary Fuel Factor (FAF) - 16%', dateLabel, addressLabel, refLine].filter(Boolean);
-        const fafDesc = fafDescParts.join('\n');
-        lineItems.push({ ItemCode: '312', Description: fafDesc, Quantity: 1, UnitAmount: fafAmount, AccountCode: deliveryAccountCode });
-      }
-    }
-
-    // Use the most recent delivery date as the invoice date
-    const invoiceDate = deliveries
-      .map(d => d.date)
-      .filter(Boolean)
-      .sort()
-      .pop() || new Date().toISOString().slice(0, 10);
-
-    const response = await axios.post('https://api.xero.com/api.xro/2.0/Invoices',
-      { Invoices: [{ Type: 'ACCREC', Status: 'DRAFT', Contact: contactId ? { ContactID: contactId } : { Name: contactName }, Reference: reference || undefined, LineItems: lineItems, Date: invoiceDate }] },
-      { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, 'Content-Type': 'application/json', Accept: 'application/json' } }
-    );
-    const inv = response.data.Invoices?.[0];
-    if (inv?.HasErrors) return res.status(500).json({ error: inv.ValidationErrors?.[0]?.Message || 'Validation error' });
-    res.json({ invoiceId: inv.InvoiceID, invoiceNumber: inv.InvoiceNumber });
+    const { contactId, contactName, deliveries, accountType } = req.body;
+    const inv = await createXeroInvoice({ access_token, tenant_id, contactId, contactName, accountType, deliveries });
+    res.json(inv);
   } catch (err) {
     console.error('Invoice error:', err.response?.data || err.message);
     res.status(500).json({ error: JSON.stringify(err.response?.data) || err.message });
   }
 });
+
+// ===== NIGHTLY AUTO-INVOICING (11:59pm NZ time) =====
+// Gets the current date/time in NZ regardless of the server's own timezone
+function getNZDateTimeParts() {
+  const fmt = new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const map = {};
+  fmt.formatToParts(new Date()).forEach(p => { map[p.type] = p.value; });
+  return { date: `${map.year}-${map.month}-${map.day}`, hour: parseInt(map.hour, 10), minute: parseInt(map.minute, 10) };
+}
+
+async function runNightlyInvoicing() {
+  console.log('[AutoInvoice] Starting nightly invoicing run', new Date().toISOString());
+  let db;
+  try {
+    db = await getDb();
+    const result = await db.query('SELECT id, data FROM deliveries');
+    const { date: todayNZ } = getNZDateTimeParts();
+    // Every uninvoiced order paid by Invoice (not EFTPOS), dated today or earlier — future-dated
+    // deliveries (e.g. one entered ahead for tomorrow) are left for their own night to run
+    const pending = result.rows.filter(r => !r.data.invoiced && r.data.paymentType !== 'eftpos' && (!r.data.date || r.data.date <= todayNZ));
+    if (!pending.length) { console.log('[AutoInvoice] Nothing to invoice tonight'); await db.end(); return; }
+
+    // Group ALL outstanding orders per customer (not just today's), same as manual multi-select
+    const groups = {};
+    for (const r of pending) {
+      const d = r.data;
+      const key = d.contactId || d.contactName;
+      if (!groups[key]) groups[key] = { contactId: d.contactId, contactName: d.contactName, accountType: d.accountType, rows: [] };
+      groups[key].rows.push(r);
+    }
+
+    const { access_token, tenant_id } = await getValidToken();
+    for (const key of Object.keys(groups)) {
+      const g = groups[key];
+      const deliveriesForInvoice = g.rows.map(r => r.data);
+      try {
+        const inv = await createXeroInvoice({ access_token, tenant_id, contactId: g.contactId, contactName: g.contactName, accountType: g.accountType || 'trade', deliveries: deliveriesForInvoice });
+        for (const r of g.rows) {
+          const updated = { ...r.data, invoiced: true, invoicedAt: new Date().toISOString(), xeroInvoiceId: inv.invoiceId, xeroInvoiceNumber: inv.invoiceNumber, paymentStatus: 'unpaid' };
+          await db.query('UPDATE deliveries SET data = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(updated), r.id]);
+        }
+        console.log(`[AutoInvoice] Created invoice ${inv.invoiceNumber || inv.invoiceId} for ${g.contactName} (${g.rows.length} order(s))`);
+      } catch (err) {
+        console.error(`[AutoInvoice] Failed to invoice ${g.contactName}:`, err.response?.data || err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[AutoInvoice] Run failed:', err.message);
+  } finally {
+    if (db) await db.end();
+  }
+  console.log('[AutoInvoice] Nightly run complete', new Date().toISOString());
+}
+
+// Checks every 30s for 11:59pm NZ time; guards against firing twice in the same minute/day
+let lastAutoInvoiceDate = null;
+setInterval(() => {
+  const { date, hour, minute } = getNZDateTimeParts();
+  if (hour === 23 && minute === 59 && lastAutoInvoiceDate !== date) {
+    lastAutoInvoiceDate = date;
+    runNightlyInvoicing().catch(e => console.error('[AutoInvoice] Unhandled error:', e.message));
+  }
+}, 30 * 1000);
 
 app.get('/api/invoice-status/:invoiceId', async (req, res) => {
   try {
