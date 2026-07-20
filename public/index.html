@@ -370,8 +370,8 @@ const TRUCKS=[{name:'Hino 300',maxT:6},{name:'Hino 700',maxT:12},{name:'Hino 700
 const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const SCOOP_TO_M3=1/3;
 const CONV_RATES={'chip':1.5,'schist':1.5,'pebble':1.6,'ap20':1.65,'ap40':1.75,'crusher':1.5,'premix':1.7,'rounds':1.6,'tailings':1.6,'sand':1.55,'soil':1.2,'compost':1.2,'vege':1.2,'garden':1.2,'topdress':1.2,'living earth':1.2};
-// Products that are priced per m3 (cubic rate) — everything else defaults to scoop
-const M3_KEYWORDS=['soil','bulk'];
+// Products that are priced per m3 (cubic rate) — everything else is scoop-only
+const M3_KEYWORDS=['soil'];
 // This product auto-disables delivery fee
 const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
 
@@ -541,6 +541,7 @@ function renderProductRows(){
     const p=PRODUCTS.find(x=>x.sku===row.sku);
     const basePrice=row.customPrice!==null?row.customPrice:(p?p.price:0);
     const discountedPrice=row.discount?+(basePrice*0.9).toFixed(2):basePrice;
+    const canM3=p?isM3Product(p.name):false;
     return`<div class="product-row">
       <div style="width:100%;position:relative">
         <input type="text" placeholder="Search product..." value="${row.searchText||p?.name||''}" oninput="filterProducts(${i},this.value)" onfocus="showProductDropdown(${i})" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-family:inherit">
@@ -549,9 +550,10 @@ function renderProductRows(){
       <div style="display:flex;gap:6px;align-items:center;width:100%;margin-top:6px;flex-wrap:wrap">
         <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" value="${row.qty}" onchange="updateProductQty(${i},this.value)">
         <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden">
-          <button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='m3'?'#2d7a3a':'#fff'};color:${row.unit==='m3'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'m3')">m3</button>
+          ${canM3?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='m3'?'#2d7a3a':'#fff'};color:${row.unit==='m3'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'m3')">m3</button>`:`<button disabled title="Only soil products are sold by m3" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">m3</button>`}
           <button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='scoop'?'#2d7a3a':'#fff'};color:${row.unit==='scoop'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'scoop')">Scoop</button>
         </div>
+        ${p&&!canM3?`<span style="font-size:11px;color:#888;font-style:italic">Sold in scoops only</span>`:''}
         <div style="flex:1;min-width:90px">
           <div style="font-size:11px;color:#888;margin-bottom:2px">Unit price $</div>
           <input type="number" style="font-size:13px" min="0" step="0.01" value="${basePrice}" onchange="updateCustomPrice(${i},this.value)">
@@ -586,7 +588,7 @@ function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkSc
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
 function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
-function setUnit(i,unit){productRows[i].unit=unit;renderProductRows();}
+function setUnit(i,unit){const p=PRODUCTS.find(x=>x.sku===productRows[i].sku);if(unit==='m3'&&!(p&&isM3Product(p.name)))return;productRows[i].unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
 function getTonnes(row){const p=PRODUCTS.find(x=>x.sku===row.sku);if(!p)return 0;const conv=getConvRate(p.name);if(!conv)return 0;return getM3(row)*conv;}
 function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TRUCKS[TRUCKS.length-1];}
