@@ -194,6 +194,16 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
         </div>
       </div>
 
+      <div class="card" style="margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Operator (your name)</label>
+          <div style="position:relative">
+            <input type="text" id="operator-name" placeholder="Who's entering this?" autocomplete="off" oninput="filterOperatorNames(this.value)" onfocus="showOperatorDropdown()" onblur="setTimeout(()=>{document.getElementById('operator-suggestions').style.display='none';},150)">
+            <div id="operator-suggestions" class="search-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:100"></div>
+          </div>
+        </div>
+      </div>
+
       <div id="delivery-date-details">
         <div class="section-hdr">Date &amp; time</div>
         <div class="card">
@@ -437,6 +447,7 @@ function enterAdmin(){
   document.getElementById('driver-nav').style.display='none';
   document.getElementById('user-badge').style.display='none';
   setDefaultDate();loadProducts();loadDeliveries();
+  try{const names=getOperatorNames();if(names.length)document.getElementById('operator-name').value=names[0];}catch{}
 }
 
 function enterDriver(){
@@ -523,6 +534,12 @@ function updateDailyTotal(){
 }
 
 // ===== FORM CONTROLS =====
+function getOperatorNames(){try{return JSON.parse(localStorage.getItem('mainscape_operator_names')||'[]');}catch{return [];}}
+function addOperatorName(name){name=(name||'').trim();if(!name)return;let list=getOperatorNames().filter(n=>n.toLowerCase()!==name.toLowerCase());list.unshift(name);list=list.slice(0,10);try{localStorage.setItem('mainscape_operator_names',JSON.stringify(list));}catch{}}
+function filterOperatorNames(val){const list=getOperatorNames().filter(n=>n.toLowerCase().includes((val||'').toLowerCase()));renderOperatorDropdown(list);}
+function showOperatorDropdown(){filterOperatorNames(document.getElementById('operator-name').value);}
+function renderOperatorDropdown(list){const drop=document.getElementById('operator-suggestions');if(!list.length){drop.style.display='none';return;}drop.innerHTML=list.map(n=>`<div class="search-result" onclick="selectOperatorName('${n.replace(/'/g,"\\'")}')">${n}</div>`).join('');drop.style.display='block';}
+function selectOperatorName(name){document.getElementById('operator-name').value=name;document.getElementById('operator-suggestions').style.display='none';}
 function setPaymentType(type){paymentType=type;document.getElementById('toggle-invoice').className='toggle-opt'+(type==='invoice'?' active':'');document.getElementById('toggle-eftpos').className='toggle-opt'+(type==='eftpos'?' active-amber':'');}
 function setAccountType(type){accountType=type;document.getElementById('toggle-trade').className='toggle-opt'+(type==='trade'?' active':'');document.getElementById('toggle-retail').className='toggle-opt'+(type==='retail'?' active-blue':'');productRows.forEach(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);r.discount=type==='trade'&&p&&!isTradeDiscountExcluded(p.name);});renderProductRows();}
 function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-date-details').style.display=type==='delivered'?'block':'none';document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
@@ -628,12 +645,13 @@ async function confirmOrder(){
   if(deliveryType==='delivered'){addr=document.getElementById('job-address').value.trim();if(!addr){showMsg(msg,'err','Please enter a delivery address.');return;}date=document.getElementById('delivery-date').value;time=document.getElementById('delivery-time').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const truckSel=document.getElementById('truck-select').value;const rec=totalT>0?autoTruck(totalT).name:'Hino 300';truck=truckSel==='auto'?rec:truckSel;const zInfo=detectZone(addr,truck);zone=zInfo?zInfo.zone:'Zone 6 - Quote';zoneFee=(zInfo&&includeZoneFee)?zInfo.fee:0;const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();zoneProductDesc=`${zone} - ${isBig?'Big':'Mini'} Truck${isSoil?' SOIL':''} Delivery`;const zoneProduct=PRODUCTS.find(p=>p.name.toLowerCase()===zoneProductDesc.toLowerCase());zoneProductSku=zoneProduct?zoneProduct.sku:'';}
   else{date=document.getElementById('exyard-date').value;time=document.getElementById('exyard-time').value;}
   const lineItems=validRows.map(row=>{const p=PRODUCTS.find(x=>x.sku===row.sku);const m3=getM3(row);const basePrice=row.customPrice!==null?row.customPrice:(p?p.price:0);const qtyLabel=row.unit==='scoop'?`${row.qty} scoop${row.qty!==1?'s':''}`:`${m3.toFixed(2)}m3`;return{sku:row.sku,desc:`${p?p.name:row.sku} (${qtyLabel})`,qty:row.unit==='scoop'?row.qty:m3,unit:row.unit,price:basePrice,discount:row.discount?10:0};});
-  const newDelivery={contactId:currentContact.id,contactName:currentContact.name,contactPhone:currentContact.phone||'',contactEmail:currentContact.email||'',jobAddress:addr,deliveryType,paymentType,tradeDiscount:validRows.some(r=>r.discount),accountType,date,time,notes:document.getElementById('delivery-notes').value.trim(),truck,zone,zoneFee,zoneProductDesc,zoneProductSku,lineItems,done:false,invoiced:false,xeroInvoiceId:null,xeroInvoiceNumber:null,paymentStatus:null,createdAt:new Date().toISOString()};
+  const newDelivery={contactId:currentContact.id,contactName:currentContact.name,contactPhone:currentContact.phone||'',contactEmail:currentContact.email||'',jobAddress:addr,deliveryType,paymentType,tradeDiscount:validRows.some(r=>r.discount),accountType,operator:document.getElementById('operator-name').value.trim(),date,time,notes:document.getElementById('delivery-notes').value.trim(),truck,zone,zoneFee,zoneProductDesc,zoneProductSku,lineItems,done:false,invoiced:false,xeroInvoiceId:null,xeroInvoiceNumber:null,paymentStatus:null,createdAt:new Date().toISOString()};
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';
   try{
     const r=await fetch('/api/deliveries',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(newDelivery)});
     const d=await r.json();if(d.error)throw new Error(d.error);
     deliveries.push(d.delivery);
+    addOperatorName(newDelivery.operator);
   }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}
   // Reset form
   productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:'',discount:false}];
