@@ -413,20 +413,29 @@ function isTradeDiscountExcluded(name){
   }
   return TRADE_DISCOUNT_EXCLUDED.some(k=>lower.includes(k));
 }
-// Base soil products that have a separate scoop-priced item in Xero (named "<Base> Scoop")
-const SOIL_SCOOP_BASE=['garden soil','screened soil'];
+// Base soil products that have a separate scoop-priced item in Xero.
+// Explicit map since real Xero item names don't follow a clean "<Base> Scoop" pattern
+// (e.g. the m3 item is "Screened Soil Ex yard", not "Screened Soil" - that name is retired/hidden).
+// Keys/values are lowercase, trimmed Xero item names.
+const SOIL_SCOOP_PAIRS={
+  'screened soil ex yard':'screened soil scoop',
+  'garden soil ex yard':'garden soil scoop',
+};
 function findProductByExactName(name){const target=name.trim().toLowerCase();return PRODUCTS.find(x=>x.name.trim().toLowerCase()===target)||null;}
-function isScoopSoilProduct(name){const lower=name.trim().toLowerCase();if(!lower.endsWith(' scoop'))return false;const base=lower.slice(0,-6).trim();return SOIL_SCOOP_BASE.includes(base);}
+function isScoopSoilProduct(name){const lower=name.trim().toLowerCase();return Object.values(SOIL_SCOOP_PAIRS).includes(lower);}
 // Given the currently selected product's name, find the sku to switch to when toggling unit
 function getPairedSoilSku(currentName,toUnit){
   const lower=currentName.trim().toLowerCase();
-  if(toUnit==='scoop'&&SOIL_SCOOP_BASE.includes(lower)){
-    const scoopProduct=findProductByExactName(currentName.trim()+' Scoop');
+  if(toUnit==='scoop'){
+    const scoopName=SOIL_SCOOP_PAIRS[lower];
+    if(!scoopName)return null;
+    const scoopProduct=findProductByExactName(scoopName);
     return scoopProduct?scoopProduct.sku:null;
   }
-  if(toUnit==='m3'&&isScoopSoilProduct(currentName)){
-    const base=currentName.trim().slice(0,-6).trim();
-    const m3Product=findProductByExactName(base);
+  if(toUnit==='m3'){
+    const entry=Object.entries(SOIL_SCOOP_PAIRS).find(([,scoopName])=>scoopName===lower);
+    if(!entry)return null;
+    const m3Product=findProductByExactName(entry[0]);
     return m3Product?m3Product.sku:null;
   }
   return null;
