@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Mainscape Delivery</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#235b2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mainscape">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -196,9 +204,9 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
 
       <div class="card" style="margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
-          <label>Operator (your name)</label>
+          <label>Operator (your full name) *</label>
           <div style="position:relative">
-            <input type="text" id="operator-name" placeholder="Who's entering this?" autocomplete="off" oninput="filterOperatorNames(this.value)" onfocus="showOperatorDropdown()" onblur="setTimeout(()=>{document.getElementById('operator-suggestions').style.display='none';},150)">
+            <input type="text" id="operator-name" placeholder="Who's entering this?" autocomplete="off" oninput="onOperatorInput(this)" onfocus="showOperatorDropdown()" onblur="setTimeout(()=>{document.getElementById('operator-suggestions').style.display='none';},150)">
             <div id="operator-suggestions" class="search-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:100"></div>
           </div>
         </div>
@@ -264,6 +272,13 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
             </select>
           </div>
         </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:12px" id="zone-fee-toggle-wrap">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:#1e40af">Delivery fee</div>
+            <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
+          </div>
+          <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
+        </div>
       </div>
 
       <div class="section-hdr">Products</div>
@@ -279,14 +294,6 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:12px" id="zone-fee-toggle-wrap">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:#1e40af">Delivery fee</div>
-          <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
-        </div>
-        <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
-      </div>
-
       <div class="section-hdr">Payment type</div>
       <div class="toggle-group">
         <button class="toggle-opt active" id="toggle-invoice" onclick="setPaymentType('invoice')"><i class="ti ti-file-invoice"></i> Invoice (Xero)</button>
@@ -295,6 +302,9 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
 
       <div class="section-hdr">Notes / reference</div>
       <div class="card"><input type="text" id="delivery-notes" placeholder="e.g. Leave at gate, job reference..."></div>
+      <div class="card" id="order-total-card" style="margin-bottom:12px;background:#f0fdf4;border:1px solid #bbf7d0">
+        <div id="order-total-display"></div>
+      </div>
       <div id="order-msg" class="alert" style="display:none"></div>
       <button class="btn btn-primary btn-full" onclick="confirmOrder()" id="confirm-btn"><i class="ti ti-check"></i> Add to deliveries</button>
     </div>
@@ -395,12 +405,39 @@ const M3_KEYWORDS=['soil'];
 // Products excluded from the automatic 10% trade discount
 const TRADE_DISCOUNT_EXCLUDED=['tree stake','cement','punga','paver','weedmat','weed mat','staple'];
 function isTradeDiscountExcluded(name){return TRADE_DISCOUNT_EXCLUDED.some(k=>name.toLowerCase().includes(k));}
+// Base soil products that have a separate scoop-priced item in Xero (named "<Base> Scoop")
+const SOIL_SCOOP_BASE=['garden soil','screened soil'];
+function findProductByExactName(name){const target=name.trim().toLowerCase();return PRODUCTS.find(x=>x.name.trim().toLowerCase()===target)||null;}
+function isScoopSoilProduct(name){const lower=name.trim().toLowerCase();if(!lower.endsWith(' scoop'))return false;const base=lower.slice(0,-6).trim();return SOIL_SCOOP_BASE.includes(base);}
+// Given the currently selected product's name, find the sku to switch to when toggling unit
+function getPairedSoilSku(currentName,toUnit){
+  const lower=currentName.trim().toLowerCase();
+  if(toUnit==='scoop'&&SOIL_SCOOP_BASE.includes(lower)){
+    const scoopProduct=findProductByExactName(currentName.trim()+' Scoop');
+    return scoopProduct?scoopProduct.sku:null;
+  }
+  if(toUnit==='m3'&&isScoopSoilProduct(currentName)){
+    const base=currentName.trim().slice(0,-6).trim();
+    const m3Product=findProductByExactName(base);
+    return m3Product?m3Product.sku:null;
+  }
+  return null;
+}
+// Resolves the actual price to charge for a row: custom override, else Xero price with the 10% scoop-soil markup applied
+function getEffectiveBasePrice(sku,customPrice){
+  if(customPrice!==null)return customPrice;
+  const p=PRODUCTS.find(x=>x.sku===sku);
+  if(!p)return 0;
+  return isScoopSoilProduct(p.name)?Math.round(p.price*0.90*100)/100:p.price;
+}
 // This product auto-disables delivery fee
 const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
 
 function getConvRate(n){const nl=n.toLowerCase();for(const [k,v] of Object.entries(CONV_RATES)){if(nl.includes(k))return v;}return null;}
 function isSoilProduct(name){return name.toLowerCase().includes('soil');}
 function isM3Product(name){return M3_KEYWORDS.some(k=>name.toLowerCase().includes(k));}
+// A product can offer the m3 toggle only if it's a plain m3 soil item, or (if it's a scoop item) its paired m3 item still exists
+function canToggleToM3(name){if(!isM3Product(name))return false;if(isScoopSoilProduct(name))return!!getPairedSoilSku(name,'m3');return true;}
 function isScreenedSoilDelivered(name){return name.toLowerCase().includes('screened soil delivered');}
 
 let PRODUCTS=[];
@@ -535,6 +572,7 @@ function updateDailyTotal(){
 
 // ===== FORM CONTROLS =====
 function getOperatorNames(){try{return JSON.parse(localStorage.getItem('mainscape_operator_names')||'[]');}catch{return [];}}
+function onOperatorInput(el){const pos=el.selectionStart;el.value=el.value.replace(/(^|\s)([a-zA-Z])/g,(m,p1,p2)=>p1+p2.toUpperCase());try{el.selectionStart=el.selectionEnd=pos;}catch{}filterOperatorNames(el.value);}
 function addOperatorName(name){name=(name||'').trim();if(!name)return;let list=getOperatorNames().filter(n=>n.toLowerCase()!==name.toLowerCase());list.unshift(name);list=list.slice(0,10);try{localStorage.setItem('mainscape_operator_names',JSON.stringify(list));}catch{}}
 function filterOperatorNames(val){const list=getOperatorNames().filter(n=>n.toLowerCase().includes((val||'').toLowerCase()));renderOperatorDropdown(list);}
 function showOperatorDropdown(){filterOperatorNames(document.getElementById('operator-name').value);}
@@ -542,7 +580,7 @@ function renderOperatorDropdown(list){const drop=document.getElementById('operat
 function selectOperatorName(name){document.getElementById('operator-name').value=name;document.getElementById('operator-suggestions').style.display='none';}
 function setPaymentType(type){paymentType=type;document.getElementById('toggle-invoice').className='toggle-opt'+(type==='invoice'?' active':'');document.getElementById('toggle-eftpos').className='toggle-opt'+(type==='eftpos'?' active-amber':'');}
 function setAccountType(type){accountType=type;document.getElementById('toggle-trade').className='toggle-opt'+(type==='trade'?' active':'');document.getElementById('toggle-retail').className='toggle-opt'+(type==='retail'?' active-blue':'');productRows.forEach(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);r.discount=type==='trade'&&p&&!isTradeDiscountExcluded(p.name);});renderProductRows();}
-function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-date-details').style.display=type==='delivered'?'block':'none';document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
+function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-date-details').style.display=type==='delivered'?'block':'none';document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';updateOrderTotal();}
 function toggleZoneFee(){
   includeZoneFee=!includeZoneFee;
   const btn=document.getElementById('zone-fee-toggle');
@@ -551,6 +589,28 @@ function toggleZoneFee(){
   detectZoneFromInput();
 }
 
+
+// ===== ORDER TOTAL (for EFTPOS) =====
+function calcProductsTotal(){return productRows.reduce((s,r)=>{if(!r.sku)return s;const basePrice=getEffectiveBasePrice(r.sku,r.customPrice);const price=r.discount?basePrice*0.9:basePrice;return s+r.qty*price;},0);}
+function calcZoneFeeAmount(){
+  if(deliveryType!=='delivered'||!includeZoneFee)return 0;
+  const addrEl=document.getElementById('job-address');if(!addrEl)return 0;
+  const addr=addrEl.value;const truckSel=document.getElementById('truck-select').value;
+  const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);
+  const rec=totalT>0?autoTruck(totalT).name:'Hino 300';
+  const truck=truckSel==='auto'?rec:truckSel;
+  const z=detectZone(addr,truck);
+  return z?z.fee:0;
+}
+function updateOrderTotal(){
+  const el=document.getElementById('order-total-display');if(!el)return;
+  const productsTotal=calcProductsTotal();
+  const zoneFee=calcZoneFeeAmount();
+  const faf=zoneFee>0?Math.round(zoneFee*0.16*100)/100:0;
+  const subtotal=productsTotal+zoneFee+faf;
+  const total=subtotal*1.15;
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:600;color:#166534">Order total (incl. GST)</div><div style="font-size:11px;color:#4d9d5f">For EFTPOS</div></div><div style="font-size:24px;font-weight:700;color:#166534">$${total.toFixed(2)}</div></div>`;
+}
 
 // ===== PRODUCT ROWS =====
 function checkScreenedSoilDelivered(){
@@ -569,9 +629,9 @@ function renderProductRows(){
   const el=document.getElementById('product-rows');
   el.innerHTML=productRows.map((row,i)=>{
     const p=PRODUCTS.find(x=>x.sku===row.sku);
-    const basePrice=row.customPrice!==null?row.customPrice:(p?p.price:0);
+    const basePrice=getEffectiveBasePrice(row.sku,row.customPrice);
     const discountedPrice=row.discount?+(basePrice*0.9).toFixed(2):basePrice;
-    const canM3=p?isM3Product(p.name):false;
+    const canM3=p?canToggleToM3(p.name):false;
     return`<div class="product-row">
       <div style="width:100%;position:relative">
         <input type="text" placeholder="Search product..." value="${row.searchText||p?.name||''}" oninput="filterProducts(${i},this.value)" onfocus="showProductDropdown(${i})" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-family:inherit">
@@ -595,6 +655,7 @@ function renderProductRows(){
     </div>`;
   }).join('');
   updateWeightSummary();
+  updateOrderTotal();
 }
 
 function filterProducts(i,val){productRows[i].searchText=val;const filtered=PRODUCTS.filter(p=>p.name.toLowerCase().includes(val.toLowerCase())||p.sku.toLowerCase().includes(val.toLowerCase())).slice(0,20);const drop=document.getElementById('pdrop-'+i);if(!filtered.length){drop.style.display='none';return;}drop.innerHTML=filtered.map(p=>`<div class="product-option" onclick="selectProduct(${i},'${p.sku}')"><div>${p.name}</div><div class="sku">$${p.price}</div></div>`).join('');drop.style.display='block';}
@@ -605,7 +666,7 @@ function selectProduct(i,sku){
   productRows[i].searchText=p?p.name:'';
   productRows[i].customPrice=null;
   // Smart default unit
-  productRows[i].unit=p?(isM3Product(p.name)?'m3':'scoop'):'scoop';
+  productRows[i].unit=p?(isScoopSoilProduct(p.name)?'scoop':(isM3Product(p.name)?'m3':'scoop')):'scoop';
   // Auto trade discount, unless product is excluded
   productRows[i].discount=accountType==='trade'&&p&&!isTradeDiscountExcluded(p.name);
   const drop=document.getElementById('pdrop-'+i);
@@ -620,14 +681,14 @@ function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkSc
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
 function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
-function setUnit(i,unit){const p=PRODUCTS.find(x=>x.sku===productRows[i].sku);if(unit==='m3'&&!(p&&isM3Product(p.name)))return;productRows[i].unit=unit;renderProductRows();}
+function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
 function getTonnes(row){const p=PRODUCTS.find(x=>x.sku===row.sku);if(!p)return 0;const conv=getConvRate(p.name);if(!conv)return 0;return getM3(row)*conv;}
 function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TRUCKS[TRUCKS.length-1];}
 function updateWeightSummary(){const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const totalM=productRows.reduce((s,r)=>s+getM3(r),0);const ws=document.getElementById('weight-summary');if(totalT>0){const rec=autoTruck(totalT);const pct=Math.min(100,(totalT/rec.maxT)*100);document.getElementById('weight-text').textContent=`Est. ${totalT.toFixed(2)}T / ${totalM.toFixed(1)}m3`;document.getElementById('truck-rec').textContent=`Recommended: ${rec.name}`;document.getElementById('truck-rec').style.display='block';const wf=document.getElementById('weight-fill');wf.style.width=pct+'%';wf.className='weight-fill'+(pct>90?' danger':pct>70?' warning':'');ws.style.display='block';}else{ws.style.display='none';}}
 function hasSoilInOrder(){return productRows.some(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);return p&&isSoilProduct(p.name);});}
 function detectZone(addr,truck){const a=addr.toLowerCase();const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();for(const z of ZONES){if(z.areas.some(area=>a.includes(area))){let fee;if(isBig){fee=(isSoil&&z.bigSoil)?z.bigSoil:z.big;}else{fee=(isSoil&&z.miniSoil)?z.miniSoil:z.mini;}return{zone:z.name,fee,isSoil};}}return null;}
-function detectZoneFromInput(){const addr=document.getElementById('job-address').value;const truckSel=document.getElementById('truck-select').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const rec=totalT>0?autoTruck(totalT).name:'Hino 300';const truck=truckSel==='auto'?rec:truckSel;const z=detectZone(addr,truck);const el=document.getElementById('zone-result');if(z&&includeZoneFee){el.innerHTML=`<span class="zone-pill"><i class="ti ti-map-pin"></i> ${z.zone} - $${z.fee}+GST${z.isSoil?' (soil)':''}</span>`;el.style.display='block';}else if(z&&!includeZoneFee){el.innerHTML=`<span class="zone-pill" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-map-pin"></i> ${z.zone} - No fee</span>`;el.style.display='block';}else if(addr.length>5){el.innerHTML=`<span class="badge badge-pending">Zone 6 - Quote required</span>`;el.style.display='block';}else{el.style.display='none';}}
+function detectZoneFromInput(){const addr=document.getElementById('job-address').value;const truckSel=document.getElementById('truck-select').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const rec=totalT>0?autoTruck(totalT).name:'Hino 300';const truck=truckSel==='auto'?rec:truckSel;const z=detectZone(addr,truck);const el=document.getElementById('zone-result');if(z&&includeZoneFee){el.innerHTML=`<span class="zone-pill"><i class="ti ti-map-pin"></i> ${z.zone} - $${z.fee}+GST${z.isSoil?' (soil)':''}</span>`;el.style.display='block';}else if(z&&!includeZoneFee){el.innerHTML=`<span class="zone-pill" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-map-pin"></i> ${z.zone} - No fee</span>`;el.style.display='block';}else if(addr.length>5){el.innerHTML=`<span class="badge badge-pending">Zone 6 - Quote required</span>`;el.style.display='block';}else{el.style.display='none';}updateOrderTotal();}
 let addrTimeout;
 async function onAddressInput(){const val=document.getElementById('job-address').value;detectZoneFromInput();clearTimeout(addrTimeout);if(val.length<4){document.getElementById('address-suggestions').style.display='none';return;}addrTimeout=setTimeout(async()=>{try{const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val+', Canterbury, New Zealand')}&format=json&limit=5&countrycodes=nz`,{headers:{'Accept-Language':'en'}});const data=await r.json();const el=document.getElementById('address-suggestions');if(!data.length){el.style.display='none';return;}el.innerHTML=data.map(a=>`<div class="search-result" onclick="selectAddress('${a.display_name.replace(/'/g,"&#39;").replace(/"/g,'&quot;')}')">${a.display_name}</div>`).join('');el.style.display='block';}catch{}},500);}
 function selectAddress(addr){const parts=addr.split(',');const allZoneAreas=ZONES.flatMap(z=>z.areas);const townPart=parts.findIndex(p=>allZoneAreas.some(a=>p.toLowerCase().includes(a)));const keep=townPart>0?Math.max(4,townPart+1):4;document.getElementById('job-address').value=parts.slice(0,keep).join(',').trim();document.getElementById('address-suggestions').style.display='none';detectZoneFromInput();}
@@ -641,11 +702,13 @@ async function confirmOrder(){
   const btn=document.getElementById('confirm-btn');const msg=document.getElementById('order-msg');msg.style.display='none';
   if(!currentContact){const name=document.getElementById('nc-name').value.trim();if(!name){showMsg(msg,'err','Please select or add a customer.');return;}btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';try{const r=await fetch('/api/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nc-phone').value.trim(),email:document.getElementById('nc-email').value.trim()})});const d=await r.json();if(d.error)throw new Error(d.error);currentContact=d;}catch(e){showMsg(msg,'err','Could not create contact: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}}
   const validRows=productRows.filter(r=>r.sku);if(!validRows.length){showMsg(msg,'err','Please add at least one product.');return;}
+  const operatorVal=document.getElementById('operator-name').value.trim();
+  if(!operatorVal||operatorVal.split(/\s+/).length<2){showMsg(msg,'err','Please enter your full name (first and last) in Operator.');return;}
   let addr='Ex Yard',zone='Ex Yard',zoneFee=0,truck='Ex Yard',date='',time='09:00',zoneProductDesc='',zoneProductSku='';
   if(deliveryType==='delivered'){addr=document.getElementById('job-address').value.trim();if(!addr){showMsg(msg,'err','Please enter a delivery address.');return;}date=document.getElementById('delivery-date').value;time=document.getElementById('delivery-time').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const truckSel=document.getElementById('truck-select').value;const rec=totalT>0?autoTruck(totalT).name:'Hino 300';truck=truckSel==='auto'?rec:truckSel;const zInfo=detectZone(addr,truck);zone=zInfo?zInfo.zone:'Zone 6 - Quote';zoneFee=(zInfo&&includeZoneFee)?zInfo.fee:0;const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const isSoil=hasSoilInOrder();zoneProductDesc=`${zone} - ${isBig?'Big':'Mini'} Truck${isSoil?' SOIL':''} Delivery`;const zoneProduct=PRODUCTS.find(p=>p.name.toLowerCase()===zoneProductDesc.toLowerCase());zoneProductSku=zoneProduct?zoneProduct.sku:'';}
   else{date=document.getElementById('exyard-date').value;time=document.getElementById('exyard-time').value;}
-  const lineItems=validRows.map(row=>{const p=PRODUCTS.find(x=>x.sku===row.sku);const m3=getM3(row);const basePrice=row.customPrice!==null?row.customPrice:(p?p.price:0);const qtyLabel=row.unit==='scoop'?`${row.qty} scoop${row.qty!==1?'s':''}`:`${m3.toFixed(2)}m3`;return{sku:row.sku,desc:`${p?p.name:row.sku} (${qtyLabel})`,qty:row.unit==='scoop'?row.qty:m3,unit:row.unit,price:basePrice,discount:row.discount?10:0};});
-  const newDelivery={contactId:currentContact.id,contactName:currentContact.name,contactPhone:currentContact.phone||'',contactEmail:currentContact.email||'',jobAddress:addr,deliveryType,paymentType,tradeDiscount:validRows.some(r=>r.discount),accountType,operator:document.getElementById('operator-name').value.trim(),date,time,notes:document.getElementById('delivery-notes').value.trim(),truck,zone,zoneFee,zoneProductDesc,zoneProductSku,lineItems,done:false,invoiced:false,xeroInvoiceId:null,xeroInvoiceNumber:null,paymentStatus:null,createdAt:new Date().toISOString()};
+  const lineItems=validRows.map(row=>{const p=PRODUCTS.find(x=>x.sku===row.sku);const m3=getM3(row);const basePrice=getEffectiveBasePrice(row.sku,row.customPrice);const qtyLabel=row.unit==='scoop'?`${row.qty} scoop${row.qty!==1?'s':''}`:`${m3.toFixed(2)}m3`;return{sku:row.sku,desc:`${p?p.name:row.sku} (${qtyLabel})`,qty:row.unit==='scoop'?row.qty:m3,unit:row.unit,price:basePrice,discount:row.discount?10:0};});
+  const newDelivery={contactId:currentContact.id,contactName:currentContact.name,contactPhone:currentContact.phone||'',contactEmail:currentContact.email||'',jobAddress:addr,deliveryType,paymentType,tradeDiscount:validRows.some(r=>r.discount),accountType,operator:operatorVal,date,time,notes:document.getElementById('delivery-notes').value.trim(),truck,zone,zoneFee,zoneProductDesc,zoneProductSku,lineItems,done:false,invoiced:false,xeroInvoiceId:null,xeroInvoiceNumber:null,paymentStatus:null,createdAt:new Date().toISOString()};
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';
   try{
     const r=await fetch('/api/deliveries',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(newDelivery)});
@@ -823,7 +886,28 @@ function renderExYard(){
   const pending=deliveries.filter(d=>d.deliveryType==='exyard'&&!d.done).sort((a,b)=>((a.date||'9999')+a.time).localeCompare((b.date||'9999')+b.time));
   const el=document.getElementById('exyard-list');
   if(!pending.length){el.innerHTML='<div class="empty"><i class="ti ti-building-warehouse"></i>No pending ex yard orders</div>';return;}
-  el.innerHTML=pending.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');
+  // Group by contactId (fall back to contactName)
+  const groups={};
+  pending.forEach(d=>{
+    const key=d.contactId||d.contactName;
+    if(!groups[key])groups[key]={name:d.contactName,orders:[]};
+    groups[key].orders.push(d);
+  });
+  el.innerHTML=Object.values(groups).map(g=>{
+    const groupTotal=g.orders.reduce((s,d)=>s+orderTotal(d),0);
+    const groupKey='eg-'+g.name.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+    const ordersHTML=g.orders.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');
+    return`<div class="customer-group">
+      <div class="customer-group-header" onclick="toggleCustomerGroup('${groupKey}')">
+        <h3><i class="ti ti-building" style="font-size:14px;margin-right:4px"></i>${g.name}</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#888">${g.orders.length} load${g.orders.length>1?'s':''} · $${groupTotal.toFixed(0)}+GST</span>
+          <i class="ti ti-chevron-down" style="font-size:14px;color:#888"></i>
+        </div>
+      </div>
+      <div id="${groupKey}" class="customer-group-body open">${ordersHTML}</div>
+    </div>`;
+  }).join('');
 }
 
 // ===== INVOICE LIST — grouped by customer =====
