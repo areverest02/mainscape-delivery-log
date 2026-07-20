@@ -182,11 +182,37 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
 
     <!-- NEW ORDER -->
     <div id="tab-orders" class="content">
-      <div class="section-hdr">Payment type</div>
-      <div class="toggle-group">
-        <button class="toggle-opt active" id="toggle-invoice" onclick="setPaymentType('invoice')"><i class="ti ti-file-invoice"></i> Invoice (Xero)</button>
-        <button class="toggle-opt" id="toggle-eftpos" onclick="setPaymentType('eftpos')"><i class="ti ti-credit-card"></i> EFTPOS</button>
+      <div class="section-hdr">Account &amp; delivery type</div>
+      <div class="row" style="gap:8px;margin-bottom:4px">
+        <div class="toggle-group" style="margin:0">
+          <button class="toggle-opt active" id="toggle-trade" onclick="setAccountType('trade')">Trade</button>
+          <button class="toggle-opt" id="toggle-retail" onclick="setAccountType('retail')">Retail</button>
+        </div>
+        <div class="toggle-group" style="margin:0">
+          <button class="toggle-opt active" id="toggle-delivered" onclick="setDeliveryType('delivered')"><i class="ti ti-truck"></i> Delivered</button>
+          <button class="toggle-opt" id="toggle-exyard" onclick="setDeliveryType('exyard')"><i class="ti ti-building-warehouse"></i> Ex Yard</button>
+        </div>
       </div>
+
+      <div id="delivery-date-details">
+        <div class="section-hdr">Date &amp; time</div>
+        <div class="card">
+          <div class="row">
+            <div class="form-group"><label>Date</label><input type="date" id="delivery-date"></div>
+            <div class="form-group"><label>Time</label><input type="time" id="delivery-time" value="09:00"></div>
+          </div>
+        </div>
+      </div>
+      <div id="exyard-details" style="display:none">
+        <div class="section-hdr">Date &amp; time</div>
+        <div class="card">
+          <div class="row">
+            <div class="form-group"><label>Date</label><input type="date" id="exyard-date"></div>
+            <div class="form-group"><label>Time</label><input type="time" id="exyard-time" value="09:00"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-hdr">Customer</div>
       <div class="card">
         <div class="form-group">
@@ -205,39 +231,8 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
           </div>
         </div>
         <button class="btn btn-sm" onclick="toggleNewContact()" id="new-contact-toggle"><i class="ti ti-user-plus"></i> Add new customer</button>
-        <hr class="divider" style="margin-top:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
-          <div><div style="font-size:13px;font-weight:600;color:#1a1a1a">Account type</div><div style="font-size:12px;color:#888">Sets Xero account code</div></div>
-          <div class="toggle-group" style="margin:0;width:180px">
-            <button class="toggle-opt active" id="toggle-trade" onclick="setAccountType('trade')">Trade</button>
-            <button class="toggle-opt" id="toggle-retail" onclick="setAccountType('retail')">Retail</button>
-          </div>
-        </div>
       </div>
-      <div class="section-hdr">Products</div>
-      <div class="card">
 
-        <div id="products-loading" class="muted" style="text-align:center;padding:12px">Loading products from Xero...</div>
-        <div id="product-rows" style="display:none"></div>
-        <button class="btn btn-sm" onclick="addProductRow()" id="add-product-btn" style="display:none;margin-top:4px"><i class="ti ti-plus"></i> Add product</button>
-        <div id="weight-summary" style="display:none;margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px">
-          <div style="font-size:13px;color:#166534;margin-bottom:4px" id="weight-text"></div>
-          <div class="weight-bar"><div class="weight-fill" id="weight-fill" style="width:0%"></div></div>
-          <div id="truck-rec" style="display:none;font-size:12px;color:#166534;margin-top:4px"></div>
-        </div>
-      </div>
-      <div class="section-hdr">Delivery type</div>
-      <div class="toggle-group">
-        <button class="toggle-opt active" id="toggle-delivered" onclick="setDeliveryType('delivered')"><i class="ti ti-truck"></i> Delivered</button>
-        <button class="toggle-opt" id="toggle-exyard" onclick="setDeliveryType('exyard')"><i class="ti ti-building-warehouse"></i> Ex Yard</button>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:12px" id="zone-fee-toggle-wrap">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:#1e40af">Delivery fee</div>
-          <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
-        </div>
-        <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
-      </div>
       <div id="delivery-details">
         <div class="section-hdr">Delivery details</div>
         <div class="card">
@@ -258,21 +253,36 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
               <option value="Hino 700 Truck and Trailer">Hino 700 Truck and Trailer (up to 30T)</option>
             </select>
           </div>
-          <div class="row">
-            <div class="form-group"><label>Date</label><input type="date" id="delivery-date"></div>
-            <div class="form-group"><label>Time</label><input type="time" id="delivery-time" value="09:00"></div>
-          </div>
         </div>
       </div>
-      <div id="exyard-details" style="display:none">
-        <div class="section-hdr">Ex yard details</div>
-        <div class="card">
-          <div class="row">
-            <div class="form-group"><label>Date</label><input type="date" id="exyard-date"></div>
-            <div class="form-group"><label>Time</label><input type="time" id="exyard-time" value="09:00"></div>
-          </div>
+
+      <div class="section-hdr">Products</div>
+      <div class="card">
+
+        <div id="products-loading" class="muted" style="text-align:center;padding:12px">Loading products from Xero...</div>
+        <div id="product-rows" style="display:none"></div>
+        <button class="btn btn-sm" onclick="addProductRow()" id="add-product-btn" style="display:none;margin-top:4px"><i class="ti ti-plus"></i> Add product</button>
+        <div id="weight-summary" style="display:none;margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px">
+          <div style="font-size:13px;color:#166534;margin-bottom:4px" id="weight-text"></div>
+          <div class="weight-bar"><div class="weight-fill" id="weight-fill" style="width:0%"></div></div>
+          <div id="truck-rec" style="display:none;font-size:12px;color:#166534;margin-top:4px"></div>
         </div>
       </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:12px" id="zone-fee-toggle-wrap">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#1e40af">Delivery fee</div>
+          <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
+        </div>
+        <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
+      </div>
+
+      <div class="section-hdr">Payment type</div>
+      <div class="toggle-group">
+        <button class="toggle-opt active" id="toggle-invoice" onclick="setPaymentType('invoice')"><i class="ti ti-file-invoice"></i> Invoice (Xero)</button>
+        <button class="toggle-opt" id="toggle-eftpos" onclick="setPaymentType('eftpos')"><i class="ti ti-credit-card"></i> EFTPOS</button>
+      </div>
+
       <div class="section-hdr">Notes / reference</div>
       <div class="card"><input type="text" id="delivery-notes" placeholder="e.g. Leave at gate, job reference..."></div>
       <div id="order-msg" class="alert" style="display:none"></div>
@@ -515,7 +525,7 @@ function updateDailyTotal(){
 // ===== FORM CONTROLS =====
 function setPaymentType(type){paymentType=type;document.getElementById('toggle-invoice').className='toggle-opt'+(type==='invoice'?' active':'');document.getElementById('toggle-eftpos').className='toggle-opt'+(type==='eftpos'?' active-amber':'');}
 function setAccountType(type){accountType=type;document.getElementById('toggle-trade').className='toggle-opt'+(type==='trade'?' active':'');document.getElementById('toggle-retail').className='toggle-opt'+(type==='retail'?' active-blue':'');productRows.forEach(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);r.discount=type==='trade'&&p&&!isTradeDiscountExcluded(p.name);});renderProductRows();}
-function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
+function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-date-details').style.display=type==='delivered'?'block':'none';document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
 function toggleZoneFee(){
   includeZoneFee=!includeZoneFee;
   const btn=document.getElementById('zone-fee-toggle');
