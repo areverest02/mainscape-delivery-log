@@ -404,7 +404,15 @@ const CONV_RATES={'chip':1.5,'schist':1.5,'pebble':1.6,'ap20':1.65,'ap40':1.75,'
 const M3_KEYWORDS=['soil'];
 // Products excluded from the automatic 10% trade discount
 const TRADE_DISCOUNT_EXCLUDED=['tree stake','cement','punga','paver','weedmat','weed mat','staple'];
-function isTradeDiscountExcluded(name){return TRADE_DISCOUNT_EXCLUDED.some(k=>name.toLowerCase().includes(k));}
+// Soil products are excluded from the auto discount, except the scoop variants of screened/garden soil
+const TRADE_DISCOUNT_SOIL_SCOOP_EXCEPTIONS=['screened soil scoop','garden soil scoop'];
+function isTradeDiscountExcluded(name){
+  const lower=name.toLowerCase();
+  if(lower.includes('soil')){
+    return !TRADE_DISCOUNT_SOIL_SCOOP_EXCEPTIONS.some(k=>lower.includes(k));
+  }
+  return TRADE_DISCOUNT_EXCLUDED.some(k=>lower.includes(k));
+}
 // Base soil products that have a separate scoop-priced item in Xero (named "<Base> Scoop")
 const SOIL_SCOOP_BASE=['garden soil','screened soil'];
 function findProductByExactName(name){const target=name.trim().toLowerCase();return PRODUCTS.find(x=>x.name.trim().toLowerCase()===target)||null;}
@@ -681,7 +689,7 @@ function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkSc
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
 function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
-function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;}}row.unit=unit;renderProductRows();}
+function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
 function getTonnes(row){const p=PRODUCTS.find(x=>x.sku===row.sku);if(!p)return 0;const conv=getConvRate(p.name);if(!conv)return 0;return getM3(row)*conv;}
 function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TRUCKS[TRUCKS.length-1];}
