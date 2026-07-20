@@ -372,6 +372,9 @@ const SCOOP_TO_M3=1/3;
 const CONV_RATES={'chip':1.5,'schist':1.5,'pebble':1.6,'ap20':1.65,'ap40':1.75,'crusher':1.5,'premix':1.7,'rounds':1.6,'tailings':1.6,'sand':1.55,'soil':1.2,'compost':1.2,'vege':1.2,'garden':1.2,'topdress':1.2,'living earth':1.2};
 // Products that are priced per m3 (cubic rate) — everything else is scoop-only
 const M3_KEYWORDS=['soil'];
+// Products excluded from the automatic 10% trade discount
+const TRADE_DISCOUNT_EXCLUDED=['tree stake','cement','punga','paver','weedmat','weed mat','staple'];
+function isTradeDiscountExcluded(name){return TRADE_DISCOUNT_EXCLUDED.some(k=>name.toLowerCase().includes(k));}
 // This product auto-disables delivery fee
 const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
 
@@ -511,7 +514,7 @@ function updateDailyTotal(){
 
 // ===== FORM CONTROLS =====
 function setPaymentType(type){paymentType=type;document.getElementById('toggle-invoice').className='toggle-opt'+(type==='invoice'?' active':'');document.getElementById('toggle-eftpos').className='toggle-opt'+(type==='eftpos'?' active-amber':'');}
-function setAccountType(type){accountType=type;document.getElementById('toggle-trade').className='toggle-opt'+(type==='trade'?' active':'');document.getElementById('toggle-retail').className='toggle-opt'+(type==='retail'?' active-blue':'');}
+function setAccountType(type){accountType=type;document.getElementById('toggle-trade').className='toggle-opt'+(type==='trade'?' active':'');document.getElementById('toggle-retail').className='toggle-opt'+(type==='retail'?' active-blue':'');productRows.forEach(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);r.discount=type==='trade'&&p&&!isTradeDiscountExcluded(p.name);});renderProductRows();}
 function setDeliveryType(type){deliveryType=type;document.getElementById('toggle-delivered').classList.toggle('active',type==='delivered');document.getElementById('toggle-exyard').classList.toggle('active',type==='exyard');document.getElementById('delivery-details').style.display=type==='delivered'?'block':'none';document.getElementById('exyard-details').style.display=type==='exyard'?'block':'none';document.getElementById('zone-fee-toggle-wrap').style.display=type==='delivered'?'flex':'none';}
 function toggleZoneFee(){
   includeZoneFee=!includeZoneFee;
@@ -576,6 +579,8 @@ function selectProduct(i,sku){
   productRows[i].customPrice=null;
   // Smart default unit
   productRows[i].unit=p?(isM3Product(p.name)?'m3':'scoop'):'scoop';
+  // Auto trade discount, unless product is excluded
+  productRows[i].discount=accountType==='trade'&&p&&!isTradeDiscountExcluded(p.name);
   const drop=document.getElementById('pdrop-'+i);
   if(drop)drop.style.display='none';
   renderProductRows();
