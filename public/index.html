@@ -654,7 +654,7 @@ function renderProductRows(){
         <div id="pdrop-${i}" class="product-dropdown"></div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;width:100%;margin-top:6px;flex-wrap:wrap">
-        <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" value="${row.qty}" onchange="updateProductQty(${i},this.value)">
+        <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" value="${row.qty}" oninput="updateProductQty(${i},this.value)">
         <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden">
           ${canM3?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='m3'?'#2d7a3a':'#fff'};color:${row.unit==='m3'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'m3')">m3</button>`:`<button disabled title="Only soil products are sold by m3" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">m3</button>`}
           <button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='scoop'?'#2d7a3a':'#fff'};color:${row.unit==='scoop'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'scoop')">Scoop</button>
@@ -695,7 +695,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.product-dropdown')&
 function addProductRow(){productRows.push({sku:'',qty:1,unit:'scoop',customPrice:null,searchText:'',discount:false});renderProductRows();}
 function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkScreenedSoilDelivered();}
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
-function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();updateOrderTotal();}
+function updateProductQty(i,val){const parsed=parseFloat(val);productRows[i].qty=isNaN(parsed)?productRows[i].qty:parsed;updateWeightSummary();updateOrderTotal();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
 function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
