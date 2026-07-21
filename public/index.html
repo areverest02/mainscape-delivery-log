@@ -251,6 +251,19 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
         <button class="btn btn-sm" onclick="toggleNewContact()" id="new-contact-toggle"><i class="ti ti-user-plus"></i> Add new customer</button>
       </div>
 
+      <div class="section-hdr">Products</div>
+      <div class="card">
+
+        <div id="products-loading" class="muted" style="text-align:center;padding:12px">Loading products from Xero...</div>
+        <div id="product-rows" style="display:none"></div>
+        <button class="btn btn-sm" onclick="addProductRow()" id="add-product-btn" style="display:none;margin-top:4px"><i class="ti ti-plus"></i> Add product</button>
+        <div id="weight-summary" style="display:none;margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px">
+          <div style="font-size:13px;color:#166534;margin-bottom:4px" id="weight-text"></div>
+          <div class="weight-bar"><div class="weight-fill" id="weight-fill" style="width:0%"></div></div>
+          <div id="truck-rec" style="display:none;font-size:12px;color:#166534;margin-top:4px"></div>
+        </div>
+      </div>
+
       <div id="delivery-details">
         <div class="section-hdr">Delivery details</div>
         <div class="card">
@@ -278,19 +291,6 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
             <div style="font-size:12px;color:#3b82f6">Turn off if delivery included in price</div>
           </div>
           <button id="zone-fee-toggle" onclick="toggleZoneFee()" style="padding:6px 14px;border-radius:20px;border:1px solid #bfdbfe;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">On</button>
-        </div>
-      </div>
-
-      <div class="section-hdr">Products</div>
-      <div class="card">
-
-        <div id="products-loading" class="muted" style="text-align:center;padding:12px">Loading products from Xero...</div>
-        <div id="product-rows" style="display:none"></div>
-        <button class="btn btn-sm" onclick="addProductRow()" id="add-product-btn" style="display:none;margin-top:4px"><i class="ti ti-plus"></i> Add product</button>
-        <div id="weight-summary" style="display:none;margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px">
-          <div style="font-size:13px;color:#166534;margin-bottom:4px" id="weight-text"></div>
-          <div class="weight-bar"><div class="weight-fill" id="weight-fill" style="width:0%"></div></div>
-          <div id="truck-rec" style="display:none;font-size:12px;color:#166534;margin-top:4px"></div>
         </div>
       </div>
 
