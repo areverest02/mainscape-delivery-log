@@ -68,6 +68,11 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
 .stat-label { font-size: 12px; color: #666; margin-top: 2px; }
 .login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: #f5f5f0; }
 .login-card { background: #fff; border-radius: 16px; padding: 32px 24px; width: 100%; max-width: 360px; text-align: center; box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+.role-select-grid { display: flex; gap: 14px; margin-top: 8px; }
+.role-card { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px 12px; border: 1px solid #e8e8e2; border-radius: 14px; background: #fff; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.role-card:hover { border-color: #2d7a3a; background: #f0fdf4; }
+.role-card i { font-size: 36px; color: #2d7a3a; }
+.role-card span { font-size: 14px; font-weight: 600; color: #1a1a1a; }
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
 .alert-err { background: #fdf0f0; color: #c0392b; }
 .alert-ok { background: #f0fdf4; color: #166534; }
@@ -141,22 +146,34 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
       <img src="https://mainscapegardensupplies.co.nz/wp-content/uploads/2020/04/cropped-mainscape-garden-logo-1-300x66.png" style="height:50px;margin-bottom:20px" alt="Mainscape">
       <h2 style="font-size:20px;margin-bottom:6px">Delivery Hub</h2>
       <div id="login-msg" class="alert" style="display:none"></div>
-      <div id="driver-login-section">
-        <p style="font-size:14px;color:#666;margin-bottom:16px">Enter your name and PIN to access driver view</p>
+      <div id="login-form-section">
+        <p style="font-size:14px;color:#666;margin-bottom:16px">Enter your name and PIN to log in</p>
         <div class="form-group" style="text-align:left">
           <label>Your name</label>
-          <input type="text" id="driver-name" placeholder="e.g. John Smith" autocomplete="name">
+          <input type="text" id="login-name" placeholder="e.g. John Smith" autocomplete="name">
         </div>
         <div class="form-group" style="text-align:left">
           <label>PIN</label>
-          <input type="password" id="driver-pin" placeholder="Enter PIN" inputmode="numeric" maxlength="6" onkeydown="if(event.key==='Enter')driverLogin()">
+          <input type="password" id="login-pin" placeholder="Enter PIN" inputmode="numeric" maxlength="6" onkeydown="if(event.key==='Enter')appLogin()">
         </div>
-        <button class="btn btn-primary btn-full" onclick="driverLogin()" id="driver-login-btn"><i class="ti ti-steering-wheel"></i> Driver Login</button>
-        <div style="margin-top:16px;padding-top:16px;border-top:1px solid #eee">
-          <p style="font-size:12px;color:#aaa;margin-bottom:10px">Admin access</p>
-          <button class="btn btn-full" onclick="connectXero()" style="font-size:13px"><i class="ti ti-plug"></i> Connect to Xero (Admin)</button>
-        </div>
+        <button class="btn btn-primary btn-full" onclick="appLogin()" id="login-btn"><i class="ti ti-lock-open"></i> Log in</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ROLE SELECT SCREEN -->
+<div id="screen-role" class="screen">
+  <div class="login-screen">
+    <div class="login-card" style="max-width:400px">
+      <img src="https://mainscapegardensupplies.co.nz/wp-content/uploads/2020/04/cropped-mainscape-garden-logo-1-300x66.png" style="height:50px;margin-bottom:20px" alt="Mainscape">
+      <h2 style="font-size:20px;margin-bottom:4px" id="role-greeting">What would you like to do?</h2>
+      <div id="role-msg" class="alert" style="display:none"></div>
+      <div class="role-select-grid">
+        <button class="role-card" onclick="chooseRoleDriver()"><i class="ti ti-steering-wheel"></i><span>Driver</span></button>
+        <button class="role-card" onclick="chooseRoleAdmin()" id="role-admin-btn"><i class="ti ti-truck"></i><span>New Deliveries</span></button>
+      </div>
+      <button class="btn btn-sm" style="margin-top:20px;color:#aaa;border:none" onclick="logout()">Not you? Log out</button>
     </div>
   </div>
 </div>
@@ -465,47 +482,97 @@ let userRole=null,driverName=null,includeZoneFee=true;
 let editingDbId=null;
 
 // ===== AUTH =====
+const SESSION_KEY='mbsSession';
+const SESSION_MS=24*60*60*1000; // remember login for 24 hours
+function saveSession(name){try{localStorage.setItem(SESSION_KEY,JSON.stringify({name,ts:Date.now()}));}catch{}}
+function getSession(){try{const raw=localStorage.getItem(SESSION_KEY);if(!raw)return null;const s=JSON.parse(raw);if(!s.ts||Date.now()-s.ts>SESSION_MS){localStorage.removeItem(SESSION_KEY);return null;}return s;}catch{return null;}}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY);}catch{}}
+
 async function checkAuth(){
   const p=new URLSearchParams(window.location.search);
   if(p.get('error')){showLoginMsg('err','Connection failed. Please try again.');}
-  if(p.get('connected')){
+  const session=getSession();
+  if(p.get('connected')&&session){
+    // Returning from the Xero connect step triggered by picking "New Deliveries"
+    driverName=session.name;
     try{const r=await fetch('/auth/status',{credentials:'include'});const d=await r.json();if(d.connected){enterAdmin();return;}}catch{}
   }
-  try{const r=await fetch('/auth/status',{credentials:'include'});const d=await r.json();if(d.connected){enterAdmin();return;}}catch{}
+  if(session){
+    driverName=session.name;
+    showRoleScreen();
+    return;
+  }
   document.getElementById('screen-login').classList.add('active');
 }
 function showLoginMsg(type,text){const el=document.getElementById('login-msg');el.className='alert alert-'+(type==='err'?'err':'ok');el.textContent=text;el.style.display='block';}
+function showRoleMsg(type,text){const el=document.getElementById('role-msg');el.className='alert alert-'+(type==='err'?'err':'ok');el.textContent=text;el.style.display='block';}
+function showRoleScreen(){
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-app').classList.remove('active');
+  document.getElementById('screen-role').classList.add('active');
+  document.getElementById('role-msg').style.display='none';
+  document.getElementById('role-greeting').textContent=driverName?`Hi ${driverName}, what would you like to do?`:'What would you like to do?';
+}
 function connectXero(){window.location.href='/auth/xero';}
 
-async function driverLogin(){
-  const name=document.getElementById('driver-name').value.trim();
-  const pin=document.getElementById('driver-pin').value.trim();
-  const btn=document.getElementById('driver-login-btn');
+async function appLogin(){
+  const name=document.getElementById('login-name').value.trim();
+  const pin=document.getElementById('login-pin').value.trim();
+  const btn=document.getElementById('login-btn');
   if(!name){showLoginMsg('err','Please enter your name.');return;}
   if(!pin){showLoginMsg('err','Please enter the PIN.');return;}
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Logging in...';
   try{
     const r=await fetch('/auth/driver',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pin})});
     const d=await r.json();
-    if(d.error){showLoginMsg('err',d.error);btn.disabled=false;btn.innerHTML='<i class="ti ti-steering-wheel"></i> Driver Login';return;}
-    driverName=d.name;enterDriver();
-  }catch(e){showLoginMsg('err','Login failed. Try again.');btn.disabled=false;btn.innerHTML='<i class="ti ti-steering-wheel"></i> Driver Login';}
+    if(d.error){showLoginMsg('err',d.error);btn.disabled=false;btn.innerHTML='<i class="ti ti-lock-open"></i> Log in';return;}
+    driverName=d.name;
+    saveSession(driverName);
+    document.getElementById('login-msg').style.display='none';
+    showRoleScreen();
+  }catch(e){showLoginMsg('err','Login failed. Try again.');btn.disabled=false;btn.innerHTML='<i class="ti ti-lock-open"></i> Log in';}
+}
+
+function chooseRoleDriver(){
+  document.getElementById('screen-role').classList.remove('active');
+  enterDriver();
+}
+async function chooseRoleAdmin(){
+  const btn=document.getElementById('role-admin-btn');
+  btn.disabled=true;
+  try{
+    const r=await fetch('/auth/status',{credentials:'include'});
+    const d=await r.json();
+    if(d.connected){
+      document.getElementById('screen-role').classList.remove('active');
+      enterAdmin();
+    }else{
+      showRoleMsg('ok','Connecting to Xero...');
+      connectXero();
+    }
+  }catch(e){
+    btn.disabled=false;
+    showRoleMsg('err','Could not check connection. Please try again.');
+  }
 }
 
 function enterAdmin(){
   userRole='admin';
   document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-role').classList.remove('active');
   document.getElementById('screen-app').classList.add('active');
   document.getElementById('admin-nav').style.display='flex';
   document.getElementById('driver-nav').style.display='none';
-  document.getElementById('user-badge').style.display='none';
+  document.getElementById('user-badge').textContent=driverName||'';
+  document.getElementById('user-badge').style.display=driverName?'inline-block':'none';
   setDefaultDate();loadProducts();loadDeliveries();
-  try{const names=getOperatorNames();if(names.length)document.getElementById('operator-name').value=names[0];}catch{}
+  try{if(driverName)document.getElementById('operator-name').value=driverName;else{const names=getOperatorNames();if(names.length)document.getElementById('operator-name').value=names[0];}}catch{}
 }
 
 function enterDriver(){
   userRole='driver';
   document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-role').classList.remove('active');
   document.getElementById('screen-app').classList.add('active');
   document.getElementById('admin-nav').style.display='none';
   document.getElementById('driver-nav').style.display='flex';
@@ -520,13 +587,15 @@ function enterDriver(){
 async function logout(){
   if(userRole==='admin'){await fetch('/auth/logout',{credentials:'include'});}
   userRole=null;driverName=null;deliveries=[];
+  clearSession();
   document.getElementById('screen-app').classList.remove('active');
+  document.getElementById('screen-role').classList.remove('active');
   document.getElementById('screen-login').classList.add('active');
-  document.getElementById('driver-name').value='';
-  document.getElementById('driver-pin').value='';
+  document.getElementById('login-name').value='';
+  document.getElementById('login-pin').value='';
   document.getElementById('login-msg').style.display='none';
-  document.getElementById('driver-login-btn').disabled=false;
-  document.getElementById('driver-login-btn').innerHTML='<i class="ti ti-steering-wheel"></i> Driver Login';
+  document.getElementById('login-btn').disabled=false;
+  document.getElementById('login-btn').innerHTML='<i class="ti ti-lock-open"></i> Log in';
 }
 
 // ===== LOAD DELIVERIES =====
