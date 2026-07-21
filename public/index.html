@@ -440,12 +440,11 @@ function getPairedSoilSku(currentName,toUnit){
   }
   return null;
 }
-// Resolves the actual price to charge for a row: custom override, else Xero price with the 10% scoop-soil markup applied
+// Resolves the actual price to charge for a row: custom override, else the actual Xero price (no automatic markdown)
 function getEffectiveBasePrice(sku,customPrice){
   if(customPrice!==null)return customPrice;
   const p=PRODUCTS.find(x=>x.sku===sku);
-  if(!p)return 0;
-  return isScoopSoilProduct(p.name)?Math.round(p.price*0.90*100)/100:p.price;
+  return p?p.price:0;
 }
 // This product auto-disables delivery fee
 const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
@@ -696,7 +695,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.product-dropdown')&
 function addProductRow(){productRows.push({sku:'',qty:1,unit:'scoop',customPrice:null,searchText:'',discount:false});renderProductRows();}
 function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkScreenedSoilDelivered();}
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
-function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();}
+function updateProductQty(i,val){productRows[i].qty=parseFloat(val)||1;updateWeightSummary();updateOrderTotal();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
 function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
