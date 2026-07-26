@@ -419,8 +419,10 @@ const SCOOP_TO_M3=1/3;
 const CONV_RATES={'chip':1.5,'schist':1.5,'pebble':1.6,'ap20':1.65,'ap40':1.75,'crusher':1.5,'premix':1.7,'rounds':1.6,'tailings':1.6,'sand':1.55,'soil':1.2,'compost':1.2,'vege':1.2,'garden':1.2,'topdress':1.2,'living earth':1.2};
 // Products that are priced per m3 (cubic rate) — everything else is scoop-only
 const M3_KEYWORDS=['soil'];
+// Products that are ALWAYS m3 only - no scoop option at all (unlike soil, which can toggle)
+const M3_ONLY_KEYWORDS=['clean fill','remedy mix'];
 // Products excluded from the automatic 10% trade discount
-const TRADE_DISCOUNT_EXCLUDED=['tree stake','cement','punga','paver','weedmat','weed mat','staple'];
+const TRADE_DISCOUNT_EXCLUDED=['tree stake','cement','punga','paver','weedmat','weed mat','staple','clean fill','remedy mix'];
 // Soil products are excluded from the auto discount, except the scoop variants of screened/garden soil
 const TRADE_DISCOUNT_SOIL_SCOOP_EXCEPTIONS=['screened soil scoop','garden soil scoop'];
 function isTradeDiscountExcluded(name){
@@ -468,9 +470,12 @@ const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
 
 function getConvRate(n){const nl=n.toLowerCase();for(const [k,v] of Object.entries(CONV_RATES)){if(nl.includes(k))return v;}return null;}
 function isSoilProduct(name){return name.toLowerCase().includes('soil');}
-function isM3Product(name){return M3_KEYWORDS.some(k=>name.toLowerCase().includes(k));}
+function isM3OnlyProduct(name){return M3_ONLY_KEYWORDS.some(k=>name.toLowerCase().includes(k));}
+function isM3Product(name){return isM3OnlyProduct(name)||M3_KEYWORDS.some(k=>name.toLowerCase().includes(k));}
 // A product can offer the m3 toggle only if it's a plain m3 soil item, or (if it's a scoop item) its paired m3 item still exists
 function canToggleToM3(name){if(!isM3Product(name))return false;if(isScoopSoilProduct(name))return!!getPairedSoilSku(name,'m3');return true;}
+// A product can offer the scoop toggle unless it's forced m3-only (e.g. clean fill, remedy mix)
+function canToggleToScoop(name){return!isM3OnlyProduct(name);}
 function isScreenedSoilDelivered(name){return name.toLowerCase().includes('screened soil delivered');}
 
 let PRODUCTS=[];
@@ -717,6 +722,7 @@ function renderProductRows(){
     const basePrice=getEffectiveBasePrice(row.sku,row.customPrice);
     const discountedPrice=row.discount?+(basePrice*0.9).toFixed(2):basePrice;
     const canM3=p?canToggleToM3(p.name):false;
+    const canScoop=p?canToggleToScoop(p.name):true;
     return`<div class="product-row">
       <div style="width:100%;position:relative">
         <input type="text" placeholder="Search product..." value="${row.searchText||p?.name||''}" oninput="filterProducts(${i},this.value)" onfocus="showProductDropdown(${i})" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-family:inherit">
@@ -726,9 +732,10 @@ function renderProductRows(){
         <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" value="${row.qty}" oninput="updateProductQty(${i},this.value)">
         <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden">
           ${canM3?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='m3'?'#2d7a3a':'#fff'};color:${row.unit==='m3'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'m3')">m3</button>`:`<button disabled title="Only soil products are sold by m3" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">m3</button>`}
-          <button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='scoop'?'#2d7a3a':'#fff'};color:${row.unit==='scoop'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'scoop')">Scoop</button>
+          ${canScoop?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='scoop'?'#2d7a3a':'#fff'};color:${row.unit==='scoop'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'scoop')">Scoop</button>`:`<button disabled title="Sold in m3 only" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">Scoop</button>`}
         </div>
         ${p&&!canM3?`<span style="font-size:11px;color:#888;font-style:italic">Sold in scoops only</span>`:''}
+        ${p&&!canScoop?`<span style="font-size:11px;color:#888;font-style:italic">Sold in m3 only</span>`:''}
         <div style="flex:1;min-width:90px">
           <div style="font-size:11px;color:#888;margin-bottom:2px">Unit price $</div>
           <input type="number" style="font-size:13px" min="0" step="0.01" value="${basePrice}" onchange="updateCustomPrice(${i},this.value)">
@@ -751,7 +758,7 @@ function selectProduct(i,sku){
   productRows[i].searchText=p?p.name:'';
   productRows[i].customPrice=null;
   // Smart default unit
-  productRows[i].unit=p?(isScoopSoilProduct(p.name)?'scoop':(isM3Product(p.name)?'m3':'scoop')):'scoop';
+  productRows[i].unit=p?(isM3OnlyProduct(p.name)?'m3':(isScoopSoilProduct(p.name)?'scoop':(isM3Product(p.name)?'m3':'scoop'))):'scoop';
   // Auto trade discount, unless product is excluded
   productRows[i].discount=accountType==='trade'&&p&&!isTradeDiscountExcluded(p.name);
   const drop=document.getElementById('pdrop-'+i);
@@ -766,7 +773,7 @@ function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkSc
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
 function updateProductQty(i,val){const parsed=parseFloat(val);productRows[i].qty=isNaN(parsed)?productRows[i].qty:parsed;updateWeightSummary();updateOrderTotal();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
-function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
+function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(unit==='scoop'&&!(p&&canToggleToScoop(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
 function getTonnes(row){const p=PRODUCTS.find(x=>x.sku===row.sku);if(!p)return 0;const conv=getConvRate(p.name);if(!conv)return 0;return getM3(row)*conv;}
 function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TRUCKS[TRUCKS.length-1];}
