@@ -323,7 +323,7 @@ input:focus, select:focus { outline: none; border-color: #2d7a3a; }
         <div id="order-total-display"></div>
       </div>
       <div id="order-msg" class="alert" style="display:none"></div>
-      <button class="btn btn-primary btn-full" onclick="confirmOrder()" id="confirm-btn"><i class="ti ti-check"></i> Add to deliveries</button>
+      <button class="btn btn-primary btn-full" onclick="confirmOrder()" id="confirm-btn"><i class="ti ti-check"></i> Complete</button>
     </div>
 
     <!-- DELIVERIES -->
@@ -792,7 +792,7 @@ function toggleNewContact(){const form=document.getElementById('new-contact-form
 // ===== CONFIRM ORDER =====
 async function confirmOrder(){
   const btn=document.getElementById('confirm-btn');const msg=document.getElementById('order-msg');msg.style.display='none';
-  if(!currentContact){const name=document.getElementById('nc-name').value.trim();if(!name){showMsg(msg,'err','Please select or add a customer.');return;}btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';try{const r=await fetch('/api/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nc-phone').value.trim(),email:document.getElementById('nc-email').value.trim()})});const d=await r.json();if(d.error)throw new Error(d.error);currentContact=d;}catch(e){showMsg(msg,'err','Could not create contact: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}}
+  if(!currentContact){const name=document.getElementById('nc-name').value.trim();if(!name){showMsg(msg,'err','Please select or add a customer.');return;}btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';try{const r=await fetch('/api/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nc-phone').value.trim(),email:document.getElementById('nc-email').value.trim()})});const d=await r.json();if(d.error)throw new Error(d.error);currentContact=d;}catch(e){showMsg(msg,'err','Could not create contact: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Complete';return;}}
   const validRows=productRows.filter(r=>r.sku);if(!validRows.length){showMsg(msg,'err','Please add at least one product.');return;}
   const operatorVal=document.getElementById('operator-name').value.trim();
   if(!operatorVal||operatorVal.split(/\s+/).length<2){showMsg(msg,'err','Please enter your full name (first and last) in Operator.');return;}
@@ -807,14 +807,14 @@ async function confirmOrder(){
     const d=await r.json();if(d.error)throw new Error(d.error);
     deliveries.push(d.delivery);
     addOperatorName(newDelivery.operator);
-  }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';return;}
+  }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Complete';return;}
   // Reset form
   productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:'',discount:false}];
   currentContact=null;
   document.getElementById('contact-search').value='';document.getElementById('job-address').value='';document.getElementById('zone-result').style.display='none';document.getElementById('address-suggestions').style.display='none';document.getElementById('selected-contact').style.display='none';document.getElementById('new-contact-form').style.display='none';document.getElementById('new-contact-toggle').style.display='inline-flex';document.getElementById('new-contact-toggle').innerHTML='<i class="ti ti-user-plus"></i> Add new customer';document.getElementById('delivery-notes').value='';
   setPaymentType('invoice');setDeliveryType('delivered');setAccountType('trade');setDefaultDate();renderProductRows();
   includeZoneFee=true;const ztBtn=document.getElementById('zone-fee-toggle');if(ztBtn){ztBtn.textContent='On';ztBtn.style.background='#2563eb';}
-  btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Add to deliveries';
+  btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Complete';
   showMsg(msg,'ok','Order added for '+newDelivery.contactName);updateStats();updateDailyTotal();
 }
 
