@@ -1099,11 +1099,12 @@ function renderDriverList(){
 let driverOnlyFilter='all';
 function filterDriverOnly(truck,el){driverOnlyFilter=truck;document.querySelectorAll('#tab-driver-only .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');renderDriverOnly();}
 function renderDriverOnly(){
-  const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done&&(driverOnlyFilter==='all'||d.truck===driverOnlyFilter));
+  const today=localDateStr();
+  const currentWeekKey=getWeekLabel(today).key;
+  const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done&&(driverOnlyFilter==='all'||d.truck===driverOnlyFilter)&&(!d.date||getWeekLabel(d.date).key>=currentWeekKey));
   const el=document.getElementById('driver-only-list');
   if(!items.length){el.innerHTML='<div class="empty"><i class="ti ti-mood-happy"></i>No deliveries scheduled — check back soon!</div>';return;}
   const byDate={};items.forEach(d=>{const key=d.date||'unscheduled';if(!byDate[key])byDate[key]=[];byDate[key].push(d);});
-  const today=localDateStr();
   el.innerHTML=Object.keys(byDate).sort().map(date=>{
     const dayItems=byDate[date].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     const isToday=date===today;
