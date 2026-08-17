@@ -656,7 +656,7 @@ function updateDailyTotal(){
   const todayOrders=deliveries.filter(d=>d.date===today);
   const total=todayOrders.reduce((s,d)=>s+orderTotal(d),0);
   const badge=document.getElementById('daily-total-badge');
-  if(todayOrders.length){badge.textContent='Today $'+total.toFixed(0);badge.style.display='inline-block';}
+  if(todayOrders.length){badge.textContent='Today $'+total.toFixed(0)+' +GST';badge.style.display='inline-block';}
   else{badge.style.display='none';}
 }
 
