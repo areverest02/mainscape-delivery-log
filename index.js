@@ -334,8 +334,8 @@ async function runNightlyInvoicing() {
         const inv = await createXeroInvoice({ access_token, tenant_id, contactId: g.contactId, contactName: g.contactName, accountType: g.accountType || 'trade', deliveries: deliveriesForInvoice });
         for (const r of g.rows) {
           const updated = { ...r.data, invoiced: true, invoicedAt: new Date().toISOString(), xeroInvoiceId: inv.invoiceId, xeroInvoiceNumber: inv.invoiceNumber, paymentStatus: 'unpaid' };
-          // Auto-mark Ex Yard orders as collected once invoiced, if not already marked done
-          if (updated.deliveryType === 'exyard' && !updated.done) {
+          // Auto-mark orders (Ex Yard as collected, Deliveries as delivered) once invoiced, if not already marked done
+          if (!updated.done) {
             updated.done = true;
             updated.doneAt = new Date().toISOString();
             updated.doneBy = 'Auto-Invoice';
