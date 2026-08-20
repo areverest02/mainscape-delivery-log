@@ -1072,7 +1072,7 @@ async function createInvoice(){
   try{
     const r=await fetch('/api/invoices',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({contactId:sel[0].contactId,contactName:sel[0].contactName,jobAddress:sel.map(d=>d.jobAddress).filter((v,i,a)=>a.indexOf(v)===i).join(', '),accountType:sel[0].accountType||'trade',deliveries:sel})});
     const d=await r.json();if(d.error)throw new Error(d.error);
-    for(const delivery of sel){delivery.invoiced=true;delivery.invoicedAt=new Date().toISOString();delivery.xeroInvoiceId=d.invoiceId;delivery.xeroInvoiceNumber=d.invoiceNumber;delivery.paymentStatus='unpaid';await updateDelivery(delivery);}
+    for(const delivery of sel){delivery.invoiced=true;delivery.invoicedAt=new Date().toISOString();delivery.xeroInvoiceId=d.invoiceId;delivery.xeroInvoiceNumber=d.invoiceNumber;delivery.paymentStatus='unpaid';if(!delivery.done){delivery.done=true;delivery.doneAt=new Date().toISOString();delivery.doneBy='Auto-Invoice';}await updateDelivery(delivery);}
     selectedForInvoice.clear();
     showMsg(msg,'ok','Draft invoice created! #'+(d.invoiceNumber||d.invoiceId));
     renderInvoiceList();renderDeliveries();renderExYard();renderDriverList();
