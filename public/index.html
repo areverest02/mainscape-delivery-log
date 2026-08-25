@@ -482,6 +482,17 @@ let PRODUCTS=[];
 let deliveries=[];
 let currentContact=null,deliveryType='delivered',paymentType='invoice',accountType='trade';
 let driverFilter='Hino 300',deliveryFilter='all',selectedForInvoice=new Set();
+let openSections=new Set(),sectionsInitialized=new Set();
+function sectionOpenClass(id,defaultOpen){if(!sectionsInitialized.has(id)){sectionsInitialized.add(id);if(defaultOpen)openSections.add(id);}return openSections.has(id)?' open':'';}
+let batchMode={deliveries:false,exyard:false,driver:false,driverOnly:false,archive:false};
+let batchSelected={deliveries:new Set(),exyard:new Set(),driver:new Set(),driverOnly:new Set(),archive:new Set()};
+function toggleBatchMode(key){batchMode[key]=!batchMode[key];batchSelected[key].clear();renderAllForBatch(key);}
+function clearBatchMode(key){batchMode[key]=false;batchSelected[key].clear();renderAllForBatch(key);}
+function toggleBatchSelect(key,dbId){const id=parseInt(dbId);const set=batchSelected[key];if(set.has(id))set.delete(id);else set.add(id);renderAllForBatch(key);}
+function renderAllForBatch(key){if(key==='deliveries')renderDeliveries();else if(key==='exyard')renderExYard();else if(key==='driver')renderDriverList();else if(key==='driverOnly')renderDriverOnly();else if(key==='archive')renderArchive();}
+function batchBarHTML(key,label,actionFn){const on=batchMode[key];const sel=batchSelected[key];if(!on){return`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-sm" onclick="toggleBatchMode('${key}')"><i class="ti ti-checkbox"></i> Select</button></div>`;}return`<div style="display:flex;align-items:center;justify-content:space-between;background:#f9f9f7;border:1px solid #e8e8e2;border-radius:10px;padding:10px 12px;margin-bottom:10px"><span style="font-size:13px;font-weight:600">${sel.size} selected</span><div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="clearBatchMode('${key}')">Cancel</button><button class="btn btn-sm btn-primary" ${sel.size?'':'disabled'} onclick="${actionFn}('${key}')"><i class="ti ti-check"></i> ${label}</button></div></div>`;}
+async function batchMarkDone(key){const set=batchSelected[key];if(!set.size)return;const ids=[...set];for(const id of ids){const d=deliveries.find(x=>x.dbId===id);if(d&&!d.done){d.done=true;d.doneAt=new Date().toISOString();d.doneBy=driverName||'Admin';await updateDelivery(d);}}batchMode[key]=false;set.clear();renderDeliveries();renderExYard();renderDriverList();renderDriverOnly();renderArchive();updateStats();}
+async function batchUndo(key){const set=batchSelected[key];if(!set.size)return;const ids=[...set];for(const id of ids){const d=deliveries.find(x=>x.dbId===id);if(d&&d.done){d.done=false;d.doneAt=null;d.doneBy=null;await updateDelivery(d);}}batchMode[key]=false;set.clear();renderDeliveries();renderExYard();renderDriverList();renderDriverOnly();renderArchive();updateStats();}
 let productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:'',discount:false}];
 let userRole=null,driverName=null,includeZoneFee=true;
 let editingDbId=null;
@@ -930,14 +941,17 @@ function truckBadge(truck){if(truck==='Hino 300')return'badge-h300';if(truck==='
 function fmtDate(dateStr){if(!dateStr)return'';const d=new Date(dateStr+'T00:00:00');return d.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});}
 
 // ===== DELIVERY CARD =====
-function deliveryCardHTML(d,showDoneBtn=true,showDelete=true,showPayCheck=true,showEdit=false){
+function deliveryCardHTML(d,showDoneBtn=true,showDelete=true,showPayCheck=true,showEdit=false,batchKey=null){
   const total=orderTotal(d);
+  const batchOn=batchKey&&batchMode[batchKey];
+  const batchSel=batchOn&&batchSelected[batchKey].has(d.dbId);
   const cardClass=d.paymentStatus==='paid'?'delivery-card paid-border':d.paymentStatus==='unpaid'?'delivery-card unpaid-border':'delivery-card';
   const doneLabel=d.deliveryType==='exyard'?'Mark collected':'Mark delivered';
   const undoLabel=d.deliveryType==='exyard'?'Undo collection':'Undo delivery';
-  return`<div class="${cardClass}">
+  return`<div class="${cardClass}"${batchOn?` style="cursor:pointer;${batchSel?'border-color:#2d7a3a;background:#f0fdf4':''}" onclick="toggleBatchSelect('${batchKey}','${d.dbId}')"`:''}>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-      <div>
+      ${batchOn?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${batchSel?'#2d7a3a':'#ddd'};background:${batchSel?'#2d7a3a':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">${batchSel?'<i class="ti ti-check" style="font-size:12px;color:#fff"></i>':''}</div>`:''}
+      <div style="flex:1">
         <div class="delivery-name">${d.contactName}</div>
         <div class="delivery-meta">${d.date?fmtDate(d.date)+' ':''} ${d.time} · ${d.jobAddress}</div>
         <div class="delivery-meta">${(d.lineItems||[]).map(li=>li.desc).join(', ')}</div>
@@ -954,14 +968,14 @@ function deliveryCardHTML(d,showDoneBtn=true,showDelete=true,showPayCheck=true,s
       ${d.tradeDiscount?'<span class="discount-badge">10% disc</span>':''}
     </div>
     ${d.done&&d.doneBy?`<div class="done-by">✓ ${d.deliveryType==='exyard'?'Collected':'Delivered'} by ${d.doneBy}${d.doneAt?' at '+new Date(d.doneAt).toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
-    <div class="delivery-actions">
+    ${batchOn?'':`<div class="delivery-actions">
       ${showDoneBtn?`<button class="btn btn-sm ${d.done?'':'btn-primary'}" onclick="toggleDone('${d.dbId}')">${d.done?`<i class="ti ti-rotate-clockwise"></i> ${undoLabel}`:`<i class="ti ti-check"></i> ${doneLabel}`}</button>`:''}
       ${d.deliveryType==='delivered'?`<a href="https://maps.google.com/maps?q=${encodeURIComponent(d.jobAddress)}" target="_blank" class="btn btn-sm"><i class="ti ti-map-pin"></i> Navigate</a>`:''}
       ${d.contactPhone?`<a href="tel:${d.contactPhone}" class="btn btn-sm"><i class="ti ti-phone"></i> Call</a>`:''}
       ${showPayCheck&&d.invoiced&&d.xeroInvoiceId?`<button class="btn btn-sm" id="pay-btn-${d.dbId}" onclick="checkPaymentStatus('${d.dbId}')"><i class="ti ti-refresh"></i> Check payment</button>`:''}
       ${showEdit?`<button class="btn btn-sm" onclick="openEditOrder('${d.dbId}')"><i class="ti ti-pencil"></i> Edit</button>`:''}
       ${showDelete?`<button class="btn btn-sm btn-danger" onclick="deleteDelivery('${d.dbId}')"><i class="ti ti-trash"></i></button>`:''}
-    </div>
+    </div>`}
   </div>`;
 }
 
@@ -970,7 +984,7 @@ function renderDeliveries(){
   const items=deliveries.filter(d=>d.deliveryType==='delivered'&&!d.done&&(deliveryFilter==='all'||d.truck===deliveryFilter)).sort((a,b)=>((a.date||'9999')+a.time).localeCompare((b.date||'9999')+b.time));
   const el=document.getElementById('deliveries-list');
   if(!items.length){el.innerHTML='<div class="empty"><i class="ti ti-truck-off"></i>No pending deliveries</div>';return;}
-  el.innerHTML=items.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');
+  el.innerHTML=batchBarHTML('deliveries','Mark complete','batchMarkDone')+items.map(d=>deliveryCardHTML(d,true,true,true,true,'deliveries')).join('');
 }
 
 function renderExYard(){
@@ -985,10 +999,10 @@ function renderExYard(){
     if(!groups[key])groups[key]={name:d.contactName,orders:[]};
     groups[key].orders.push(d);
   });
-  el.innerHTML=Object.values(groups).map(g=>{
+  el.innerHTML=batchBarHTML('exyard','Mark collected','batchMarkDone')+Object.values(groups).map(g=>{
     const groupTotal=g.orders.reduce((s,d)=>s+orderTotal(d),0);
     const groupKey='eg-'+g.name.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
-    const ordersHTML=g.orders.map(d=>deliveryCardHTML(d,true,true,true,true)).join('');
+    const ordersHTML=g.orders.map(d=>deliveryCardHTML(d,true,true,true,true,'exyard')).join('');
     return`<div class="customer-group">
       <div class="customer-group-header" onclick="toggleCustomerGroup('${groupKey}')">
         <h3><i class="ti ti-building" style="font-size:14px;margin-right:4px"></i>${g.name}</h3>
@@ -1088,11 +1102,12 @@ function renderDriverList(){
   if(!items.length){el.innerHTML='<div class="empty"><i class="ti ti-mood-happy"></i>No deliveries for this truck</div>';return;}
   const byDate={};items.forEach(d=>{const key=d.date||'unscheduled';if(!byDate[key])byDate[key]=[];byDate[key].push(d);});
   const today=localDateStr();
-  el.innerHTML=Object.keys(byDate).sort().map(date=>{
+  el.innerHTML=batchBarHTML('driver','Mark complete','batchMarkDone')+Object.keys(byDate).sort().map(date=>{
     const dayItems=byDate[date].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     const isToday=date===today;
+    const sectionId='day-'+date;
     const dayLabel=date==='unscheduled'?'Unscheduled':DAYS[new Date(date+'T00:00:00').getDay()]+' - '+fmtDate(date);
-    return`<div class="day-section"><div class="day-header" onclick="toggleDay('day-${date}')"><h3>${dayLabel}${isToday?' ⭐':''}</h3><span style="font-size:12px;color:#888">${dayItems.length} stops <i class="ti ti-chevron-down"></i></span></div><div id="day-${date}" class="day-body${isToday?' open':''}">${dayItems.map(d=>deliveryCardHTML(d,true,true,true,false)).join('')}</div></div>`;
+    return`<div class="day-section"><div class="day-header" onclick="toggleDay('${sectionId}')"><h3>${dayLabel}${isToday?' ⭐':''}</h3><span style="font-size:12px;color:#888">${dayItems.length} stops <i class="ti ti-chevron-down"></i></span></div><div id="${sectionId}" class="day-body${sectionOpenClass(sectionId,isToday)}">${dayItems.map(d=>deliveryCardHTML(d,true,true,true,false,'driver')).join('')}</div></div>`;
   }).join('');
 }
 
@@ -1105,15 +1120,16 @@ function renderDriverOnly(){
   const el=document.getElementById('driver-only-list');
   if(!items.length){el.innerHTML='<div class="empty"><i class="ti ti-mood-happy"></i>No deliveries scheduled — check back soon!</div>';return;}
   const byDate={};items.forEach(d=>{const key=d.date||'unscheduled';if(!byDate[key])byDate[key]=[];byDate[key].push(d);});
-  el.innerHTML=Object.keys(byDate).sort().map(date=>{
+  el.innerHTML=batchBarHTML('driverOnly','Mark complete','batchMarkDone')+Object.keys(byDate).sort().map(date=>{
     const dayItems=byDate[date].sort((a,b)=>(a.time||'').localeCompare(b.time||''));
     const isToday=date===today;
+    const sectionId='dday-'+date;
     const dayLabel=date==='unscheduled'?'Unscheduled':DAYS[new Date(date+'T00:00:00').getDay()]+' - '+fmtDate(date);
-    return`<div class="day-section"><div class="day-header" onclick="toggleDay('dday-${date}')"><h3>${dayLabel}${isToday?' ⭐':''}</h3><span style="font-size:12px;color:#888">${dayItems.length} stops <i class="ti ti-chevron-down"></i></span></div><div id="dday-${date}" class="day-body${isToday?' open':''}">${dayItems.map(d=>deliveryCardHTML(d,true,false,true,false)).join('')}</div></div>`;
+    return`<div class="day-section"><div class="day-header" onclick="toggleDay('${sectionId}')"><h3>${dayLabel}${isToday?' ⭐':''}</h3><span style="font-size:12px;color:#888">${dayItems.length} stops <i class="ti ti-chevron-down"></i></span></div><div id="${sectionId}" class="day-body${sectionOpenClass(sectionId,isToday)}">${dayItems.map(d=>deliveryCardHTML(d,true,false,true,false,'driverOnly')).join('')}</div></div>`;
   }).join('');
 }
 
-function toggleDay(id){const el=document.getElementById(id);if(el)el.classList.toggle('open');}
+function toggleDay(id){const el=document.getElementById(id);if(!el)return;el.classList.toggle('open');if(el.classList.contains('open'))openSections.add(id);else openSections.delete(id);sectionsInitialized.add(id);}
 function getWeekLabel(dateStr){const d=new Date(dateStr||Date.now());d.setHours(0,0,0,0);d.setDate(d.getDate()+4-(d.getDay()||7));const yearStart=new Date(d.getFullYear(),0,1);const week=Math.ceil((((d-yearStart)/86400000)+1)/7);return{week,year:d.getFullYear(),key:`${d.getFullYear()}-W${String(week).padStart(2,'0')}`};}
 
 // ===== ARCHIVE =====
@@ -1121,14 +1137,16 @@ function renderArchive(){
   const done=deliveries.filter(d=>d.done);
   const el=document.getElementById('archive-list');
   if(!done.length){el.innerHTML='<div class="empty"><i class="ti ti-archive"></i>No completed orders yet</div>';return;}
-  const byWeek={};done.forEach(d=>{const {week,year,key}=getWeekLabel(d.doneAt||d.createdAt);if(!byWeek[key])byWeek[key]={week,year,items:[]};byWeek[key].items.push(d);});
-  el.innerHTML=Object.keys(byWeek).sort().reverse().map(key=>{
+  const batchOn=batchMode.archive;
+  const byWeek={};done.forEach(d=>{const {week,year,key}=getWeekLabel(d.date||d.doneAt||d.createdAt);if(!byWeek[key])byWeek[key]={week,year,items:[]};byWeek[key].items.push(d);});
+  el.innerHTML=batchBarHTML('archive','Move to active','batchUndo')+Object.keys(byWeek).sort().reverse().map(key=>{
     const {week,year,items}=byWeek[key];
     const total=items.reduce((s,d)=>s+orderTotal(d),0);
-    return`<div class="week-section"><div class="week-header" onclick="toggleWeek('week-${key}')"><h3>Week ${week}, ${year}</h3><span style="font-size:12px;color:#888">${items.length} orders · $${total.toFixed(0)}+GST <i class="ti ti-chevron-down"></i></span></div><div id="week-${key}" class="week-body">${items.map(d=>{const tot=orderTotal(d);return`<div class="delivery-card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1"><div class="delivery-name">${d.contactName}</div><div class="delivery-meta">${d.date?fmtDate(d.date)+' ':''} ${d.deliveryType==='exyard'?'Ex Yard':d.jobAddress}</div><div class="delivery-meta">${(d.lineItems||[]).map(li=>li.desc).join(', ')}</div>${d.doneBy?`<div class="done-by">✓ ${d.deliveryType==='exyard'?'Collected':'Delivered'} by ${d.doneBy}</div>`:''}<div class="delivery-badges" style="margin-top:6px"><span class="badge ${d.invoiced?'badge-invoiced':'badge-eftpos'}">${d.invoiced?'Invoiced':'EFTPOS'}</span>${d.paymentStatus==='paid'?'<span class="payment-status payment-paid"><i class="ti ti-circle-check"></i> Paid</span>':''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">$${tot.toFixed(0)}</div><div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;align-items:flex-end"><button class="btn btn-sm" onclick="toggleDone('${d.dbId}')" title="Move back to active"><i class="ti ti-rotate-clockwise"></i> Undo</button><button class="btn btn-sm btn-danger" onclick="deleteDelivery('${d.dbId}')"><i class="ti ti-trash"></i></button></div></div></div></div>`;}).join('')}</div></div>`;
+    const sectionId='week-'+key;
+    return`<div class="week-section"><div class="week-header" onclick="toggleWeek('${sectionId}')"><h3>Week ${week}, ${year}</h3><span style="font-size:12px;color:#888">${items.length} orders · $${total.toFixed(0)}+GST <i class="ti ti-chevron-down"></i></span></div><div id="${sectionId}" class="week-body${sectionOpenClass(sectionId,false)}">${items.map(d=>{const tot=orderTotal(d);const sel=batchOn&&batchSelected.archive.has(d.dbId);return`<div class="delivery-card" style="margin-bottom:8px;${batchOn?`cursor:pointer;${sel?'border-color:#2d7a3a;background:#f0fdf4;':''}`:''}"${batchOn?` onclick="toggleBatchSelect('archive','${d.dbId}')"`:''}><div style="display:flex;justify-content:space-between;align-items:flex-start">${batchOn?`<div style="width:22px;height:22px;border-radius:50%;border:2px solid ${sel?'#2d7a3a':'#ddd'};background:${sel?'#2d7a3a':'#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;margin-top:2px">${sel?'<i class="ti ti-check" style="font-size:12px;color:#fff"></i>':''}</div>`:''}<div style="flex:1"><div class="delivery-name">${d.contactName}</div><div class="delivery-meta">${d.date?fmtDate(d.date)+' ':''} ${d.deliveryType==='exyard'?'Ex Yard':d.jobAddress}</div><div class="delivery-meta">${(d.lineItems||[]).map(li=>li.desc).join(', ')}</div>${d.doneBy?`<div class="done-by">✓ ${d.deliveryType==='exyard'?'Collected':'Delivered'} by ${d.doneBy}</div>`:''}<div class="delivery-badges" style="margin-top:6px"><span class="badge ${d.invoiced?'badge-invoiced':'badge-eftpos'}">${d.invoiced?'Invoiced':'EFTPOS'}</span>${d.paymentStatus==='paid'?'<span class="payment-status payment-paid"><i class="ti ti-circle-check"></i> Paid</span>':''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">$${tot.toFixed(0)}</div>${batchOn?'':`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;align-items:flex-end"><button class="btn btn-sm" onclick="toggleDone('${d.dbId}')" title="Move back to active"><i class="ti ti-rotate-clockwise"></i> Undo</button><button class="btn btn-sm btn-danger" onclick="deleteDelivery('${d.dbId}')"><i class="ti ti-trash"></i></button></div>`}</div></div></div>`;}).join('')}</div></div>`;
   }).join('');
 }
-function toggleWeek(id){const el=document.getElementById(id);if(el)el.classList.toggle('open');}
+function toggleWeek(id){const el=document.getElementById(id);if(!el)return;el.classList.toggle('open');if(el.classList.contains('open'))openSections.add(id);else openSections.delete(id);sectionsInitialized.add(id);}
 
 // ===== CSV EXPORT =====
 function exportCSV(){
