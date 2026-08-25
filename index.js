@@ -327,7 +327,9 @@ async function runNightlyInvoicing() {
     }
 
     const { access_token, tenant_id } = await getValidToken();
-    for (const key of Object.keys(groups)) {
+    // Invoice customers in alphabetical order
+    const sortedKeys = Object.keys(groups).sort((a, b) => (groups[a].contactName || '').localeCompare(groups[b].contactName || ''));
+    for (const key of sortedKeys) {
       const g = groups[key];
       const deliveriesForInvoice = g.rows.map(r => r.data);
       try {
