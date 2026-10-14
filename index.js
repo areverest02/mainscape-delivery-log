@@ -194,12 +194,84 @@ app.get('/api/products', async (req, res) => {
 });
 
 // ===== CONTACTS =====
+// Typo-tolerant customer search: caches the full Xero contact list (refreshed every 10 min)
+// and ranks matches locally, so small spelling mistakes, missing letters or word order still find the customer
+let contactCache = { list: [], fetchedAt: 0 };
+const CONTACT_CACHE_MS = 10 * 60 * 1000;
+function mapContact(c) {
+  return { id: c.ContactID, name: c.Name, phone: c.Phones?.find(p => p.PhoneType === 'MOBILE')?.PhoneNumber || c.Phones?.find(p => p.PhoneNumber)?.PhoneNumber || '', email: c.EmailAddress || '' };
+}
+async function getAllContacts(access_token, tenant_id) {
+  if (contactCache.list.length && Date.now() - contactCache.fetchedAt < CONTACT_CACHE_MS) return contactCache.list;
+  const all = [];
+  for (let page = 1; page <= 50; page++) {
+    const r = await axios.get(`https://api.xero.com/api.xro/2.0/Contacts?page=${page}&includeArchived=false`, { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' } });
+    const cs = r.data.Contacts || [];
+    all.push(...cs.map(mapContact));
+    if (cs.length < 100) break;
+  }
+  contactCache = { list: all, fetchedAt: Date.now() };
+  return all;
+}
+function normText(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+// Edit distance allowing one swap of adjacent letters to count as one mistake
+function editDistance(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let k = 0; k <= n; k++) d[0][k] = k;
+  for (let i = 1; i <= m; i++) for (let k = 1; k <= n; k++) {
+    const cost = a[i - 1] === b[k - 1] ? 0 : 1;
+    d[i][k] = Math.min(d[i - 1][k] + 1, d[i][k - 1] + 1, d[i - 1][k - 1] + cost);
+    if (i > 1 && k > 1 && a[i - 1] === b[k - 2] && a[i - 2] === b[k - 1]) d[i][k] = Math.min(d[i][k], d[i - 2][k - 2] + 1);
+  }
+  return d[m][n];
+}
+function wordScore(qw, nameWords) {
+  const allowed = qw.length >= 8 ? 2 : qw.length >= 3 ? 1 : 0;
+  let best = 0;
+  for (const nw of nameWords) {
+    let s = 0;
+    if (nw === qw) s = 3;
+    else if (nw.startsWith(qw)) s = 2.5;
+    else if (nw.includes(qw)) s = 2;
+    else if (allowed) {
+      const dist = Math.min(editDistance(qw, nw), editDistance(qw, nw.slice(0, qw.length)));
+      if (dist <= allowed) s = 1.5 - dist * 0.25;
+    }
+    if (s > best) best = s;
+  }
+  return best;
+}
+function contactScore(q, c) {
+  const nq = normText(q), nn = normText(c.name);
+  if (!nq) return 0;
+  const squashQ = nq.replace(/ /g, ''), squashN = nn.replace(/ /g, '');
+  if (squashN.includes(squashQ)) return 10 + (squashN.startsWith(squashQ) ? 2 : 0);
+  const nameWords = nn.split(' ').filter(Boolean);
+  let total = 0;
+  for (const qw of nq.split(' ').filter(Boolean)) {
+    const s = wordScore(qw, nameWords);
+    if (!s) return (c.email && normText(c.email).includes(squashQ)) ? 1 : 0;
+    total += s;
+  }
+  return total;
+}
+
 app.get('/api/contacts/search', async (req, res) => {
   try {
     const { access_token, tenant_id } = await getValidToken();
     const { q } = req.query;
-    const response = await axios.get(`https://api.xero.com/api.xro/2.0/Contacts?searchTerm=${encodeURIComponent(q)}&includeArchived=false`, { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' } });
-    const contacts = (response.data.Contacts || []).slice(0, 10).map(c => ({ id: c.ContactID, name: c.Name, phone: c.Phones?.find(p => p.PhoneType === 'MOBILE')?.PhoneNumber || c.Phones?.[0]?.PhoneNumber || '', email: c.EmailAddress || '' }));
+    let contacts = [];
+    try {
+      const all = await getAllContacts(access_token, tenant_id);
+      contacts = all.map(c => ({ c, s: contactScore(q, c) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.c.name.localeCompare(b.c.name)).slice(0, 10).map(x => x.c);
+    } catch (e) {
+      console.error('Contact cache error, falling back to Xero search:', e.response?.data || e.message);
+    }
+    if (!contacts.length) {
+      const response = await axios.get(`https://api.xero.com/api.xro/2.0/Contacts?searchTerm=${encodeURIComponent(q)}&includeArchived=false`, { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' } });
+      contacts = (response.data.Contacts || []).slice(0, 10).map(mapContact);
+    }
     res.json({ contacts });
   } catch (err) {
     res.status(500).json({ error: 'Failed to search contacts' });
@@ -212,6 +284,7 @@ app.post('/api/contacts', async (req, res) => {
     const { name, phone, email } = req.body;
     const response = await axios.post('https://api.xero.com/api.xro/2.0/Contacts', { Contacts: [{ Name: name, EmailAddress: email || '', Phones: phone ? [{ PhoneType: 'MOBILE', PhoneNumber: phone }] : [] }] }, { headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, 'Content-Type': 'application/json', Accept: 'application/json' } });
     const c = response.data.Contacts?.[0];
+    if (contactCache.list.length) contactCache.list.push({ id: c.ContactID, name: c.Name, phone: phone || '', email: email || '' });
     res.json({ id: c.ContactID, name: c.Name, phone, email });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create contact' });
@@ -233,7 +306,7 @@ function operatorInitials(name) {
 }
 
 // Builds and sends a Xero invoice for a set of deliveries, returns {invoiceId, invoiceNumber}
-async function createXeroInvoice({ access_token, tenant_id, contactId, contactName, accountType, deliveries }) {
+async function createXeroInvoice({ access_token, tenant_id, contactId, contactName, accountType, deliveries, invoiceDateOverride }) {
   const reference = [...new Set(deliveries.map(d => d.notes).filter(Boolean))].join(', ');
   const accountCode = accountType === 'retail' ? '203' : '204';
   const lineItems = [];
@@ -254,7 +327,9 @@ async function createXeroInvoice({ access_token, tenant_id, contactId, contactNa
       lineItems.push(item);
     }
 
-    if (d.zoneFee > 0 && d.deliveryType === 'delivered') {
+    // Skip zone fee + FAF if the order already contains a delivery-inclusive product (name contains 'deliver')
+    const hasDeliveryProduct = (d.lineItems || []).some(li => /deliver/i.test(li.desc || ''));
+    if (d.zoneFee > 0 && d.deliveryType === 'delivered' && !hasDeliveryProduct) {
       const zoneProductName = d.zoneProductDesc || `Delivery - ${d.zone} (${d.truck})`;
       const deliveryDescParts = [zoneProductName, dateLabel, addressLabel, refLine, operatorLine].filter(Boolean);
       const deliveryDesc = deliveryDescParts.join('\n');
@@ -269,7 +344,8 @@ async function createXeroInvoice({ access_token, tenant_id, contactId, contactNa
     }
   }
 
-  const invoiceDate = deliveries
+  // Nightly run passes the NZ run date so all invoices share one date and list A-Z in Xero; manual invoices use the latest delivery date
+  const invoiceDate = invoiceDateOverride || deliveries
     .map(d => d.date)
     .filter(Boolean)
     .sort()
@@ -328,12 +404,12 @@ async function runNightlyInvoicing() {
 
     const { access_token, tenant_id } = await getValidToken();
     // Invoice customers in alphabetical order
-    const sortedKeys = Object.keys(groups).sort((a, b) => (groups[a].contactName || '').localeCompare(groups[b].contactName || ''));
+    const sortedKeys = Object.keys(groups).sort((a, b) => (groups[a].contactName || '').trim().localeCompare((groups[b].contactName || '').trim(), 'en-NZ', { sensitivity: 'base' }));
     for (const key of sortedKeys) {
       const g = groups[key];
       const deliveriesForInvoice = g.rows.map(r => r.data);
       try {
-        const inv = await createXeroInvoice({ access_token, tenant_id, contactId: g.contactId, contactName: g.contactName, accountType: g.accountType || 'trade', deliveries: deliveriesForInvoice });
+        const inv = await createXeroInvoice({ access_token, tenant_id, contactId: g.contactId, contactName: g.contactName, accountType: g.accountType || 'trade', deliveries: deliveriesForInvoice, invoiceDateOverride: todayNZ });
         for (const r of g.rows) {
           const updated = { ...r.data, invoiced: true, invoicedAt: new Date().toISOString(), xeroInvoiceId: inv.invoiceId, xeroInvoiceNumber: inv.invoiceNumber, paymentStatus: 'unpaid' };
           // Auto-mark orders (Ex Yard as collected, Deliveries as delivered) once invoiced, if not already marked done
