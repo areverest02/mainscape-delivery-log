@@ -465,7 +465,7 @@ function getEffectiveBasePrice(sku,customPrice){
   const p=PRODUCTS.find(x=>x.sku===sku);
   return p?p.price:0;
 }
-// This product auto-disables delivery fee
+// Any product with 'deliver' in its name (e.g. 'Screened Soil Delivered', zone delivery items) already includes delivery, so auto-disables the zone fee
 const SCREENED_SOIL_DELIVERED='Screened Soil Delivered';
 
 function getConvRate(n){const nl=n.toLowerCase();for(const [k,v] of Object.entries(CONV_RATES)){if(nl.includes(k))return v;}return null;}
@@ -476,7 +476,7 @@ function isM3Product(name){return isM3OnlyProduct(name)||M3_KEYWORDS.some(k=>nam
 function canToggleToM3(name){if(!isM3Product(name))return false;if(isScoopSoilProduct(name))return!!getPairedSoilSku(name,'m3');return true;}
 // A product can offer the scoop toggle unless it's forced m3-only (e.g. clean fill, remedy mix)
 function canToggleToScoop(name){return!isM3OnlyProduct(name);}
-function isScreenedSoilDelivered(name){return name.toLowerCase().includes('screened soil delivered');}
+function isScreenedSoilDelivered(name){return /deliver/i.test(name||'');}
 
 let PRODUCTS=[];
 let deliveries=[];
@@ -493,7 +493,7 @@ function renderAllForBatch(key){if(key==='deliveries')renderDeliveries();else if
 function batchBarHTML(key,label,actionFn){const on=batchMode[key];const sel=batchSelected[key];if(!on){return`<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-sm" onclick="toggleBatchMode('${key}')"><i class="ti ti-checkbox"></i> Select</button></div>`;}return`<div style="display:flex;align-items:center;justify-content:space-between;background:#f9f9f7;border:1px solid #e8e8e2;border-radius:10px;padding:10px 12px;margin-bottom:10px"><span style="font-size:13px;font-weight:600">${sel.size} selected</span><div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="clearBatchMode('${key}')">Cancel</button><button class="btn btn-sm btn-primary" ${sel.size?'':'disabled'} onclick="${actionFn}('${key}')"><i class="ti ti-check"></i> ${label}</button></div></div>`;}
 async function batchMarkDone(key){const set=batchSelected[key];if(!set.size)return;const ids=[...set];for(const id of ids){const d=deliveries.find(x=>x.dbId===id);if(d&&!d.done){d.done=true;d.doneAt=new Date().toISOString();d.doneBy=driverName||'Admin';await updateDelivery(d);}}batchMode[key]=false;set.clear();renderDeliveries();renderExYard();renderDriverList();renderDriverOnly();renderArchive();updateStats();}
 async function batchUndo(key){const set=batchSelected[key];if(!set.size)return;const ids=[...set];for(const id of ids){const d=deliveries.find(x=>x.dbId===id);if(d&&d.done){d.done=false;d.doneAt=null;d.doneBy=null;await updateDelivery(d);}}batchMode[key]=false;set.clear();renderDeliveries();renderExYard();renderDriverList();renderDriverOnly();renderArchive();updateStats();}
-let productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:'',discount:false}];
+let productRows=[{sku:'',qty:null,unit:'m3',customPrice:null,searchText:'',discount:false}];
 let userRole=null,driverName=null,includeZoneFee=true;
 let editingDbId=null;
 
@@ -664,7 +664,7 @@ async function loadProducts(){
 }
 
 // ===== DAILY TOTAL =====
-function orderTotal(d){return(d.lineItems||[]).reduce((s,li)=>s+li.qty*(li.discount?li.price*(1-li.discount/100):li.price),0)+(d.zoneFee||0);}
+function orderTotal(d){const inclDelivery=(d.lineItems||[]).some(li=>/deliver/i.test(li.desc||''));return(d.lineItems||[]).reduce((s,li)=>s+li.qty*(li.discount?li.price*(1-li.discount/100):li.price),0)+(inclDelivery?0:(d.zoneFee||0));}
 function localDateStr(){const p=nzDateTimeParts();return `${p.year}-${p.month}-${p.day}`;}
 function updateDailyTotal(){
   if(userRole!=='admin')return;
@@ -720,7 +720,7 @@ function updateOrderTotal(){
 
 // ===== PRODUCT ROWS =====
 function checkScreenedSoilDelivered(){
-  // If any selected product is "Screened Soil Delivered", auto-turn off zone fee
+  // If any selected product has 'delivery'/'delivered' in its name, auto-turn off zone fee
   const hasIt=productRows.some(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);return p&&isScreenedSoilDelivered(p.name);});
   if(hasIt&&includeZoneFee){
     includeZoneFee=false;
@@ -745,7 +745,7 @@ function renderProductRows(){
         <div id="pdrop-${i}" class="product-dropdown"></div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;width:100%;margin-top:6px;flex-wrap:wrap">
-        <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" value="${row.qty}" oninput="updateProductQty(${i},this.value)">
+        <input type="number" style="width:70px;font-size:13px" min="0.1" step="0.1" inputmode="decimal" placeholder="Qty" value="${row.qty??''}" onfocus="this.select()" oninput="updateProductQty(${i},this.value)">
         <div style="display:flex;border:1px solid #ddd;border-radius:8px;overflow:hidden">
           ${canM3?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='m3'?'#2d7a3a':'#fff'};color:${row.unit==='m3'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'m3')">m3</button>`:`<button disabled title="Only soil products are sold by m3" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">m3</button>`}
           ${canScoop?`<button style="padding:6px 8px;font-size:12px;border:none;background:${row.unit==='scoop'?'#2d7a3a':'#fff'};color:${row.unit==='scoop'?'#fff':'#888'};cursor:pointer;font-family:inherit" onclick="setUnit(${i},'scoop')">Scoop</button>`:`<button disabled title="Sold in m3 only" style="padding:6px 8px;font-size:12px;border:none;background:#f3f4f6;color:#ccc;cursor:not-allowed;font-family:inherit">Scoop</button>`}
@@ -784,10 +784,10 @@ function selectProduct(i,sku){
   checkScreenedSoilDelivered();
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.product-dropdown')&&!e.target.closest('input[onfocus]'))document.querySelectorAll('.product-dropdown').forEach(d=>d.style.display='none');});
-function addProductRow(){productRows.push({sku:'',qty:1,unit:'scoop',customPrice:null,searchText:'',discount:false});renderProductRows();}
+function addProductRow(){productRows.push({sku:'',qty:null,unit:'scoop',customPrice:null,searchText:'',discount:false});renderProductRows();}
 function removeProductRow(i){productRows.splice(i,1);renderProductRows();checkScreenedSoilDelivered();}
 function toggleRowDiscount(i){productRows[i].discount=!productRows[i].discount;renderProductRows();}
-function updateProductQty(i,val){const parsed=parseFloat(val);productRows[i].qty=isNaN(parsed)?productRows[i].qty:parsed;updateWeightSummary();updateOrderTotal();}
+function updateProductQty(i,val){const parsed=parseFloat(val);productRows[i].qty=val===''?null:(isNaN(parsed)?productRows[i].qty:parsed);updateWeightSummary();updateOrderTotal();}
 function updateCustomPrice(i,val){productRows[i].customPrice=parseFloat(val);renderProductRows();}
 function setUnit(i,unit){const row=productRows[i];const p=PRODUCTS.find(x=>x.sku===row.sku);if(unit==='m3'&&!(p&&canToggleToM3(p.name)))return;if(unit==='scoop'&&!(p&&canToggleToScoop(p.name)))return;if(p){const pairedSku=getPairedSoilSku(p.name,unit);if(pairedSku){row.sku=pairedSku;row.customPrice=null;const np=PRODUCTS.find(x=>x.sku===pairedSku);row.searchText=np?np.name:row.searchText;row.discount=accountType==='trade'&&np&&!isTradeDiscountExcluded(np.name);}}row.unit=unit;renderProductRows();}
 function getM3(row){return row.unit==='scoop'?row.qty*SCOOP_TO_M3:row.qty;}
@@ -795,10 +795,18 @@ function getTonnes(row){const p=PRODUCTS.find(x=>x.sku===row.sku);if(!p)return 0
 function autoTruck(t){for(const tk of TRUCKS){if(t<=tk.maxT)return tk;}return TRUCKS[TRUCKS.length-1];}
 function updateWeightSummary(){const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const totalM=productRows.reduce((s,r)=>s+getM3(r),0);const ws=document.getElementById('weight-summary');if(totalT>0){const rec=autoTruck(totalT);const pct=Math.min(100,(totalT/rec.maxT)*100);document.getElementById('weight-text').textContent=`Est. ${totalT.toFixed(2)}T / ${totalM.toFixed(1)}m3`;document.getElementById('truck-rec').textContent=`Recommended: ${rec.name}`;document.getElementById('truck-rec').style.display='block';const wf=document.getElementById('weight-fill');wf.style.width=pct+'%';wf.className='weight-fill'+(pct>90?' danger':pct>70?' warning':'');ws.style.display='block';}else{ws.style.display='none';}}
 function hasSoilInOrder(){return productRows.some(r=>{const p=PRODUCTS.find(x=>x.sku===r.sku);return p&&isSoilProduct(p.name);});}
-function detectZone(addr,truck){const a=addr.toLowerCase();const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const orderHasSoil=hasSoilInOrder();for(const z of ZONES){if(z.areas.some(area=>a.includes(area))){const zoneHasSoilPricing=!!(z.miniSoil||z.bigSoil);const isSoil=orderHasSoil&&zoneHasSoilPricing;let fee;if(isBig){fee=(isSoil&&z.bigSoil)?z.bigSoil:z.big;}else{fee=(isSoil&&z.miniSoil)?z.miniSoil:z.mini;}return{zone:z.name,fee,isSoil};}}return null;}
+function zoneEditDist(a,b){const m=a.length,n=b.length;const d=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);for(let k=0;k<=n;k++)d[0][k]=k;for(let i=1;i<=m;i++)for(let k=1;k<=n;k++){d[i][k]=Math.min(d[i-1][k]+1,d[i][k-1]+1,d[i-1][k-1]+(a[i-1]===b[k-1]?0:1));if(i>1&&k>1&&a[i-1]===b[k-2]&&a[i-2]===b[k-1])d[i][k]=Math.min(d[i][k],d[i-2][k-2]+1);}return d[m][n];}
+function findZoneForAddress(addr){const a=addr.toLowerCase();const exact=ZONES.find(z=>z.areas.some(area=>a.includes(area)));if(exact)return exact;const words=a.replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean);for(const z of ZONES){for(const area of z.areas){if(area.length<6)continue;const n=area.split(' ').length;for(let i=0;i+n<=words.length;i++){const chunk=words.slice(i,i+n).join(' ');const allow=area.length>=8?2:1;if(Math.abs(chunk.length-area.length)<=allow&&zoneEditDist(chunk,area)<=allow)return z;}}}return null;}
+function detectZone(addr,truck){const isBig=truck==='Hino 700'||truck==='Hino 700 Truck and Trailer';const orderHasSoil=hasSoilInOrder();const z=findZoneForAddress(addr);if(!z)return null;const zoneHasSoilPricing=!!(z.miniSoil||z.bigSoil);const isSoil=orderHasSoil&&zoneHasSoilPricing;let fee;if(isBig){fee=(isSoil&&z.bigSoil)?z.bigSoil:z.big;}else{fee=(isSoil&&z.miniSoil)?z.miniSoil:z.mini;}return{zone:z.name,fee,isSoil};}
 function detectZoneFromInput(){const addr=document.getElementById('job-address').value;const truckSel=document.getElementById('truck-select').value;const totalT=productRows.reduce((s,r)=>s+getTonnes(r),0);const rec=totalT>0?autoTruck(totalT).name:'Hino 300';const truck=truckSel==='auto'?rec:truckSel;const z=detectZone(addr,truck);const el=document.getElementById('zone-result');if(z&&includeZoneFee){el.innerHTML=`<span class="zone-pill"><i class="ti ti-map-pin"></i> ${z.zone} - $${z.fee}+GST${z.isSoil?' (soil)':''}</span>`;el.style.display='block';}else if(z&&!includeZoneFee){el.innerHTML=`<span class="zone-pill" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-map-pin"></i> ${z.zone} - No fee</span>`;el.style.display='block';}else if(addr.length>5){el.innerHTML=`<span class="badge badge-pending">Zone 6 - Quote required</span>`;el.style.display='block';}else{el.style.display='none';}updateOrderTotal();}
 let addrTimeout;
-async function onAddressInput(){const val=document.getElementById('job-address').value;detectZoneFromInput();clearTimeout(addrTimeout);if(val.length<4){document.getElementById('address-suggestions').style.display='none';return;}addrTimeout=setTimeout(async()=>{try{const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val+', Canterbury, New Zealand')}&format=json&limit=5&countrycodes=nz`,{headers:{'Accept-Language':'en'}});const data=await r.json();const el=document.getElementById('address-suggestions');if(!data.length){el.style.display='none';return;}el.innerHTML=data.map(a=>`<div class="search-result" onclick="selectAddress('${a.display_name.replace(/'/g,"&#39;").replace(/"/g,'&quot;')}')">${a.display_name}</div>`).join('');el.style.display='block';}catch{}},500);}
+// Address search uses Photon (OSM-based, tolerates typos and part-typed words), biased to Canterbury; falls back to Nominatim
+function photonDisplay(p){const first=p.housenumber&&p.street?`${p.housenumber} ${p.street}`:(p.street&&p.name&&p.name!==p.street?`${p.name}, ${p.street}`:(p.street||p.name||''));const parts=[first,p.locality,p.district,p.city,p.postcode,'New Zealand'].filter(Boolean);return parts.filter((v,i)=>parts.indexOf(v)===i).join(', ');}
+async function fetchAddressSuggestions(val){
+  try{const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val)}&limit=8&lang=en&lat=-43.64&lon=172.48&bbox=170.5,-44.9,174.2,-41.9`);const data=await r.json();const list=(data.features||[]).filter(f=>(f.properties.countrycode||'').toUpperCase()==='NZ').map(f=>photonDisplay(f.properties)).filter(Boolean);const uniq=list.filter((v,i)=>list.indexOf(v)===i).slice(0,5);if(uniq.length)return uniq;}catch{}
+  try{const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val+', Canterbury, New Zealand')}&format=json&limit=5&countrycodes=nz`,{headers:{'Accept-Language':'en'}});const data=await r.json();return data.map(a=>a.display_name);}catch{return[];}
+}
+async function onAddressInput(){const val=document.getElementById('job-address').value;detectZoneFromInput();clearTimeout(addrTimeout);if(val.length<4){document.getElementById('address-suggestions').style.display='none';return;}addrTimeout=setTimeout(async()=>{const list=await fetchAddressSuggestions(val);const el=document.getElementById('address-suggestions');if(!list.length){el.style.display='none';return;}el.innerHTML=list.map(a=>`<div class="search-result" onclick="selectAddress('${a.replace(/'/g,"&#39;").replace(/"/g,'&quot;')}')">${a}</div>`).join('');el.style.display='block';},400);}
 function selectAddress(addr){const parts=addr.split(',');const allZoneAreas=ZONES.flatMap(z=>z.areas);const townPart=parts.findIndex(p=>allZoneAreas.some(a=>p.toLowerCase().includes(a)));const keep=townPart>0?Math.max(4,townPart+1):4;document.getElementById('job-address').value=parts.slice(0,keep).join(',').trim();document.getElementById('address-suggestions').style.display='none';detectZoneFromInput();}
 let searchTimeout;
 function searchContacts(){clearTimeout(searchTimeout);const q=document.getElementById('contact-search').value.trim();if(q.length<2){document.getElementById('search-results').style.display='none';return;}searchTimeout=setTimeout(async()=>{try{const r=await fetch('/api/contacts/search?q='+encodeURIComponent(q),{credentials:'include'});const d=await r.json();const el=document.getElementById('search-results');if(!d.contacts?.length){el.style.display='none';return;}el.innerHTML=d.contacts.map(c=>`<div class="search-result" onclick="selectContact(this)" data-id="${c.id}" data-name="${c.name.replace(/"/g,'&quot;')}" data-phone="${(c.phone||'').replace(/"/g,'&quot;')}" data-email="${(c.email||'').replace(/"/g,'&quot;')}"><div class="search-result-name">${c.name}</div><div class="search-result-sub">${[c.phone,c.email].filter(Boolean).join(' - ')}</div></div>`).join('');el.style.display='block';}catch{}},300);}
@@ -809,7 +817,7 @@ function toggleNewContact(){const form=document.getElementById('new-contact-form
 async function confirmOrder(){
   const btn=document.getElementById('confirm-btn');const msg=document.getElementById('order-msg');msg.style.display='none';
   if(!currentContact){const name=document.getElementById('nc-name').value.trim();if(!name){showMsg(msg,'err','Please select or add a customer.');return;}btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving...';try{const r=await fetch('/api/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone:document.getElementById('nc-phone').value.trim(),email:document.getElementById('nc-email').value.trim()})});const d=await r.json();if(d.error)throw new Error(d.error);currentContact=d;}catch(e){showMsg(msg,'err','Could not create contact: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Complete';return;}}
-  const validRows=productRows.filter(r=>r.sku);if(!validRows.length){showMsg(msg,'err','Please add at least one product.');return;}
+  const validRows=productRows.filter(r=>r.sku);if(!validRows.length){showMsg(msg,'err','Please add at least one product.');return;}if(validRows.some(r=>!(r.qty>0))){showMsg(msg,'err','Please enter a quantity for every product.');return;}
   const operatorVal=document.getElementById('operator-name').value.trim();
   if(!operatorVal||operatorVal.split(/\s+/).length<2){showMsg(msg,'err','Please enter your full name (first and last) in Operator.');return;}
   let addr='Ex Yard',zone='Ex Yard',zoneFee=0,truck='Ex Yard',date='',time='09:00',zoneProductDesc='',zoneProductSku='';
@@ -825,7 +833,7 @@ async function confirmOrder(){
     addOperatorName(newDelivery.operator);
   }catch(e){showMsg(msg,'err','Failed to save: '+e.message);btn.disabled=false;btn.innerHTML='<i class="ti ti-check"></i> Complete';return;}
   // Reset form
-  productRows=[{sku:'',qty:1,unit:'m3',customPrice:null,searchText:'',discount:false}];
+  productRows=[{sku:'',qty:null,unit:'m3',customPrice:null,searchText:'',discount:false}];
   currentContact=null;
   document.getElementById('contact-search').value='';document.getElementById('job-address').value='';document.getElementById('zone-result').style.display='none';document.getElementById('address-suggestions').style.display='none';document.getElementById('selected-contact').style.display='none';document.getElementById('new-contact-form').style.display='none';document.getElementById('new-contact-toggle').style.display='inline-flex';document.getElementById('new-contact-toggle').innerHTML='<i class="ti ti-user-plus"></i> Add new customer';document.getElementById('delivery-notes').value='';
   setPaymentType('invoice');setDeliveryType('delivered');setAccountType('trade');setDefaultDate();renderProductRows();
